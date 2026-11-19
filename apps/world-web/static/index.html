@@ -5,13 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Agents Office World — floor &amp; mission control</title>
 <!--
-  W3 render (WORLD-5). One static page, no build step, no framework, no local server required.
+  W3 render (WORLD-5) · W3 transcript (WORLD-10). One static page, no build step, no
+  framework, no local server required.
 
-  Data sources (both frozen v1.0.0, see docs/CONTRACT.md):
+  Data sources (contract v1.1.0, see docs/CONTRACT.md):
     * geometry, names, rooms, desks, schedule  -> the block below, generated from world/dayplan.yaml
                                                   by apps/world-web/contract_projection.py (drift-tested)
     * live state                              -> GET /api/world/state  (§9.1 snapshot)
                                                   WS  /ws/world        (§9.2 snapshot + patches)
+    * sim clock scale (WORLD-9)               -> contract `sim.tick_seconds` (default 60 s/tick),
+                                                  overridden by the engine's `sim_seconds_per_tick`
+    * conversations (WORLD-10)                -> `message` events in each delta, rendered as
+                                                  "[sim time] ROOM · Agent: note"
 
   Rules honoured here:
     * the page invents nothing: a badge is the wire `state` or it is blank; a ticket is the wire
@@ -59,7 +64,7 @@
   @keyframes pulse{50%{opacity:.25}}
 
   main{flex:1; display:grid; grid-template-columns:minmax(0,1fr) 430px; gap:0; min-height:0}
-  @media (max-width:1080px){ main{grid-template-columns:1fr} }
+  @media (max-width:1080px){ main{display:block} }
 
   #stage{position:relative; padding:16px 18px; min-width:0}
   #stage svg{width:100%; height:auto; display:block; border:1px solid var(--line);
@@ -141,6 +146,20 @@
   .plan li.is-next{color:var(--accent)}
   .plan li .id{color:var(--ink-faint); width:22px; flex:none}
 
+  /* ---- transcript (WORLD-10): message events, newest first ---- */
+  .chat{border-top:1px solid var(--line); display:flex; flex-direction:column; max-height:34vh; min-height:132px}
+  .chat h3{display:flex; align-items:baseline; gap:8px; margin:0; padding:11px 16px 8px;
+           font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint)}
+  .chat h3 b{color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums}
+  .chat h3 .scale{margin-left:auto; letter-spacing:.08em; text-transform:none; color:var(--ink-faint)}
+  #transcript{list-style:none; margin:0; padding:0 10px 10px; overflow:auto; flex:1; min-height:0; font-size:11px}
+  #transcript li{padding:3px 7px; border-radius:5px; color:var(--ink-dim);
+                 white-space:normal; overflow-wrap:anywhere}
+  #transcript li.is-meeting{color:#bfe6ff; background:#0f1f2b; box-shadow:inset 2px 0 0 #2b6f8f}
+  #transcript li.is-live{color:#eaf4ff; background:#12303f; box-shadow:inset 2px 0 0 var(--meeting)}
+  #transcript li.is-live::before{content:"● "; color:var(--meeting)}
+  .chat-empty{margin:0; padding:0 16px 12px; color:var(--ink-faint); font-size:10.5px; font-style:italic}
+
   footer{border-top:1px solid var(--line); background:var(--panel); color:var(--ink-faint);
          font-size:10.5px; padding:8px 20px; display:flex; gap:16px; flex-wrap:wrap}
   footer .warn{color:var(--bad)}
@@ -157,6 +176,7 @@
   </div>
   <div class="meta">
     <span>tick <b id="tick">—</b></span>
+    <span>rate <b id="rate">—</b></span>
     <span>seed <b id="seed">—</b></span>
     <span>agents <b id="agent-count">6</b></span>
   </div>
@@ -195,6 +215,11 @@
         <p class="hint" id="detail-hint">Click a dot or a row to inspect an agent.</p>
       </div>
     </div>
+    <div class="chat" aria-label="Live transcript">
+      <h3>Transcript <b id="chat-count">0</b><span class="scale" id="chat-scale"></span></h3>
+      <ol id="transcript" aria-live="polite"></ol>
+      <p class="chat-empty" id="chat-empty">no messages yet — nothing said on the floor</p>
+    </div>
     <div class="plan">
       <h3>Day plan (contract schedule)</h3>
       <ol id="plan"></ol>
@@ -208,7 +233,100 @@
   <span id="foot-warnings" class="ok">contract warnings: 0</span>
 </footer>
 
-<script id="world-contract" type="application/json">{"contract_version":"1.0.0","source":"world/dayplan.yaml","ticket":"WORLD-1","sim":{"tick_seconds":1,"t0":"2026-01-05T09:00:00Z","day_start":"09:00","day_end":"18:00","day_length_ticks":32400,"seed":42},"canvas":{"w":1200,"h":700},"states":["idle","working","review","break","meeting"],"initial_state":"idle","canonical_cycle":["idle","working","review","break","meeting","idle"],"event_types":["task_start","task_done","message","meeting_open","meeting_close","break","handoff","idle"],"agents":[{"id":"hakim","name":"Hakim","role":"orchestration","desk":"D1","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"layla","name":"Layla","role":"lifecycle","desk":"D2","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"maryam","name":"Maryam","role":"delivery","desk":"D3","home_room":"bullpen","secondary_room":"review_corner"},{"id":"omar","name":"Omar","role":"development","desk":"D4","home_room":"bullpen","secondary_room":"review_corner"},{"id":"salim","name":"Salim","role":"research","desk":"D5","home_room":"bullpen","secondary_room":"reading_room"},{"id":"yassin","name":"Yassin","role":"infrastructure","desk":"D6","home_room":"bullpen","secondary_room":"review_corner"}],"rooms":[{"id":"bullpen","name":"Bullpen","kind":"open_floor","capacity":6,"rect":{"x":40,"y":40,"w":720,"h":400},"anchor":{"x":740,"y":240}},{"id":"meeting_room","name":"Meeting Room","kind":"meeting","capacity":6,"rect":{"x":800,"y":40,"w":360,"h":240},"anchor":{"x":830,"y":160}},{"id":"review_corner","name":"Review Corner","kind":"review","capacity":2,"rect":{"x":800,"y":320,"w":360,"h":120},"anchor":{"x":830,"y":380}},{"id":"kitchen","name":"Kitchen","kind":"break","capacity":4,"rect":{"x":40,"y":470,"w":480,"h":180},"anchor":{"x":500,"y":560}},{"id":"reading_room","name":"Reading Room","kind":"focus","capacity":2,"rect":{"x":560,"y":470,"w":600,"h":180},"anchor":{"x":600,"y":560}}],"stations":[{"id":"D1","agent":"hakim","room":"bullpen","x":120,"y":140},{"id":"D2","agent":"layla","room":"bullpen","x":320,"y":140},{"id":"D3","agent":"maryam","room":"bullpen","x":520,"y":140},{"id":"D4","agent":"omar","room":"bullpen","x":120,"y":300},{"id":"D5","agent":"salim","room":"bullpen","x":320,"y":300},{"id":"D6","agent":"yassin","room":"bullpen","x":520,"y":300}],"schedule":[{"id":"S1","at":"09:00","type":"day_open","room":"bullpen","rule":"every_agent","emit":"task_start"},{"id":"S2","at":"10:00","type":"meeting","topic":"standup","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":900,"emit":["meeting_open","meeting_close"]},{"id":"S3","at":"13:00","type":"break","kind":"lunch","room":"kitchen","participants":"all","planned_ticks":2700},{"id":"S4","at":"13:45","type":"resume","rule":"every_agent","emit":"task_start"},{"id":"S5","at":"15:30","type":"break","kind":"coffee","room":"kitchen","participants":["layla","salim","yassin"],"planned_ticks":900},{"id":"S6","at":"16:30","type":"review_sweep","room":"review_corner","participants":["maryam"],"emit":"task_done"},{"id":"S7","at":"17:00","type":"meeting","topic":"daily_review","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":1800,"emit":["meeting_open","meeting_close"]},{"id":"S8","at":"18:00","type":"day_close","rule":"every_agent","emit":"idle"}]}</script>
+<script id="world-contract" type="application/json">{"contract_version":"1.1.0","source":"world/dayplan.yaml","ticket":"WORLD-1","sim":{"tick_seconds":60,"t0":"2026-01-05T09:00:00Z","day_start":"09:00","day_end":"18:00","day_length_ticks":540,"seed":42},"canvas":{"w":1200,"h":700},"states":["idle","working","review","break","meeting"],"initial_state":"idle","canonical_cycle":["idle","working","review","break","meeting","idle"],"event_types":["task_start","task_done","message","meeting_open","meeting_close","break","handoff","idle"],"agents":[{"id":"hakim","name":"Hakim","role":"orchestration","desk":"D1","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"layla","name":"Layla","role":"lifecycle","desk":"D2","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"maryam","name":"Maryam","role":"delivery","desk":"D3","home_room":"bullpen","secondary_room":"review_corner"},{"id":"omar","name":"Omar","role":"development","desk":"D4","home_room":"bullpen","secondary_room":"review_corner"},{"id":"salim","name":"Salim","role":"research","desk":"D5","home_room":"bullpen","secondary_room":"reading_room"},{"id":"yassin","name":"Yassin","role":"infrastructure","desk":"D6","home_room":"bullpen","secondary_room":"review_corner"}],"rooms":[{"id":"bullpen","name":"Bullpen","kind":"open_floor","capacity":6,"rect":{"x":40,"y":40,"w":720,"h":400},"anchor":{"x":740,"y":240}},{"id":"meeting_room","name":"Meeting Room","kind":"meeting","capacity":6,"rect":{"x":800,"y":40,"w":360,"h":240},"anchor":{"x":830,"y":160}},{"id":"review_corner","name":"Review Corner","kind":"review","capacity":2,"rect":{"x":800,"y":320,"w":360,"h":120},"anchor":{"x":830,"y":380}},{"id":"kitchen","name":"Kitchen","kind":"break","capacity":4,"rect":{"x":40,"y":470,"w":480,"h":180},"anchor":{"x":500,"y":560}},{"id":"reading_room","name":"Reading Room","kind":"focus","capacity":2,"rect":{"x":560,"y":470,"w":600,"h":180},"anchor":{"x":600,"y":560}}],"stations":[{"id":"D1","agent":"hakim","room":"bullpen","x":120,"y":140},{"id":"D2","agent":"layla","room":"bullpen","x":320,"y":140},{"id":"D3","agent":"maryam","room":"bullpen","x":520,"y":140},{"id":"D4","agent":"omar","room":"bullpen","x":120,"y":300},{"id":"D5","agent":"salim","room":"bullpen","x":320,"y":300},{"id":"D6","agent":"yassin","room":"bullpen","x":520,"y":300}],"schedule":[{"id":"S1","at":"09:00","type":"day_open","room":"bullpen","rule":"every_agent","emit":"task_start"},{"id":"S2","at":"10:00","type":"meeting","topic":"standup","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":900,"emit":["meeting_open","meeting_close"]},{"id":"S3","at":"13:00","type":"break","kind":"lunch","room":"kitchen","participants":"all","planned_ticks":2700},{"id":"S4","at":"13:45","type":"resume","rule":"every_agent","emit":"task_start"},{"id":"S5","at":"15:30","type":"break","kind":"coffee","room":"kitchen","participants":["layla","salim","yassin"],"planned_ticks":900},{"id":"S6","at":"16:30","type":"review_sweep","room":"review_corner","participants":["maryam"],"emit":"task_done"},{"id":"S7","at":"17:00","type":"meeting","topic":"daily_review","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":1800,"emit":["meeting_open","meeting_close"]},{"id":"S8","at":"18:00","type":"day_close","rule":"every_agent","emit":"idle"}]}</script>
+<script id="world-transcript-core" type="text/javascript">
+/* Transcript core (WORLD-10) — DOM-free, no framework, no state of its own.
+   The page and apps/world-web/tests/test_transcript_panel.py exercise exactly this code,
+   so the line format the test asserts is the line format the panel draws. */
+(function (root) {
+  'use strict';
+
+  var MAX_LINES = 60;        // newest 60 messages: the panel is a window, not an archive
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  /* DT-2: the clock is derived, never read — t0 + tick * sim seconds per tick */
+  function simDate(t0, secondsPerTick, tick) {
+    var base = Date.parse(t0);
+    var scale = Number(secondsPerTick);
+    if (!isFinite(base) || !Number.isInteger(tick) || !isFinite(scale) || scale <= 0) return null;
+    return new Date(base + tick * scale * 1000);
+  }
+
+  function hhmmss(date) {
+    if (!date) return '--:--:--';
+    return pad2(date.getUTCHours()) + ':' + pad2(date.getUTCMinutes()) + ':' + pad2(date.getUTCSeconds());
+  }
+
+  function textOf(event) {
+    if (typeof event.note === 'string') return event.note;
+    if (typeof event.text === 'string') return event.text;
+    return '';
+  }
+
+  function keyOf(event) {
+    return [event.tick, event.agent, event.type, event.room, textOf(event)].join('|');
+  }
+
+  /* One `message` event -> one row. Any other event type is not a message and is ignored. */
+  function describe(event, ctx) {
+    if (!event || typeof event !== 'object' || event.type !== 'message') return null;
+    var c = ctx || {};
+    var agentId = typeof event.agent === 'string' ? event.agent : '';
+    var roomId = typeof event.room === 'string' ? event.room : '';
+    var clock = hhmmss(simDate(c.t0, c.secondsPerTick, event.tick));
+    var agentName = typeof c.agentName === 'function' ? c.agentName(agentId) : agentId;
+    var roomName = typeof c.roomName === 'function' ? c.roomName(roomId) : roomId;
+    return {
+      key: keyOf(event),
+      order: 0,
+      tick: Number.isInteger(event.tick) ? event.tick : null,
+      clock: clock,
+      agentId: agentId,
+      agentName: agentName || agentId,
+      roomId: roomId,
+      roomName: roomName || roomId,
+      text: textOf(event),
+      meeting: typeof c.isMeetingRoom === 'function' ? !!c.isMeetingRoom(roomId) : false,
+      line: '[' + clock + '] ' + (roomName || '—') + ' · ' + (agentName || agentId) + ': ' + textOf(event)
+    };
+  }
+
+  function create() { return {lines: [], seen: Object.create(null), order: 0}; }
+
+  /* Ingest the `message` events of one delta; duplicates (same tick/agent/room/text) are dropped. */
+  function ingest(state, events, ctx) {
+    var added = [];
+    if (!Array.isArray(events)) return added;
+    events.forEach(function (event) {
+      var row = describe(event, ctx);
+      if (!row || state.seen[row.key]) return;
+      state.seen[row.key] = true;
+      row.order = state.order++;
+      state.lines.push(row);
+      added.push(row);
+    });
+    if (added.length) {
+      state.lines.sort(function (a, b) { return (a.tick - b.tick) || (a.order - b.order); });
+      if (state.lines.length > MAX_LINES) {
+        state.lines.slice(0, state.lines.length - MAX_LINES).forEach(function (row) {
+          delete state.seen[row.key];
+        });
+        state.lines = state.lines.slice(-MAX_LINES);
+      }
+    }
+    return added;
+  }
+
+  /* Display order: newest first, so a new message lands at the top of the panel. */
+  function rows(state) { return state.lines.slice().reverse(); }
+
+  root.WorldTranscript = {
+    MAX_LINES: MAX_LINES, create: create, ingest: ingest, rows: rows,
+    describe: describe, simDate: simDate, hhmmss: hhmmss
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+</script>
 <script>
 'use strict';
 
@@ -312,8 +430,11 @@ function applySnapshot(snap) {
   if (Number.isInteger(snap.seed)) world.seed = snap.seed;
   if (typeof snap.sim_time === 'string') world.simTime = snap.sim_time;
   if (Number.isInteger(snap.last_event_seq)) world.lastEventSeq = snap.last_event_seq;
+  if (setSimScale(snap.sim_seconds_per_tick)) { /* engine clock scale wins; paintRate shows it */ }
   if ('meeting' in snap) world.meeting = snap.meeting || null;
   if (Array.isArray(snap.agents)) applyAgents(snap.agents, world.tick);
+  applyEvents(snap.recent_messages);      // WORLD-10: history, so a reload is not blank
+  applyEvents(snap.events);
   render();
 }
 
@@ -479,14 +600,33 @@ function buildPlan() {
 }
 
 /* ======================================================================
-   6. Time — sim clock is derived (DT-2): ts = t0 + tick * tick_seconds
+   6. Time — sim clock is derived (DT-2): ts = t0 + tick * seconds_per_tick
+   The scale is the contract default (v1.1.0: 60 s/tick) and is overridden by
+   the engine's `sim_seconds_per_tick` when the wire carries it (WORLD-9).
    ====================================================================== */
-const T0_MS = Date.parse(CONTRACT.sim.t0);
-const TICK_MS = CONTRACT.sim.tick_seconds * 1000;
+const SIM = CONTRACT.sim;
+let secondsPerTick = Number(SIM.tick_seconds) > 0 ? Number(SIM.tick_seconds) : 60;
+
+function setSimScale(value) {
+  const v = Number(value);
+  if (!isFinite(v) || v <= 0 || v === secondsPerTick) return false;
+  secondsPerTick = v;
+  return true;
+}
+
+function paintRate() {
+  const rate = $('#rate');
+  if (rate) rate.textContent = secondsPerTick + ' s/tick';
+  const scale = $('#chat-scale');
+  if (scale) {
+    const dayTicks = Math.round((clockMinutes(SIM.day_end) - clockMinutes(SIM.day_start)) * 60 / secondsPerTick);
+    scale.textContent = 'day ' + dayTicks + ' ticks';
+  }
+}
 
 function simDate(tick) {
   if (!Number.isInteger(tick)) return null;
-  return new Date(T0_MS + tick * TICK_MS);
+  return new Date(Date.parse(SIM.t0) + tick * secondsPerTick * 1000);
 }
 
 function hhmmss(date) {
@@ -506,7 +646,7 @@ function clockMinutes(at) {
 
 function formatElapsed(ticks) {
   if (!Number.isInteger(ticks)) return null;
-  const total = Math.max(0, ticks) * CONTRACT.sim.tick_seconds;
+  const total = Math.max(0, ticks) * secondsPerTick;      // sim seconds, not wall seconds
   const m = Math.floor(total / 60);
   const s = total % 60;
   return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's' : s + 's';
@@ -522,10 +662,69 @@ function nextMilestone(now) {
 }
 
 /* ======================================================================
+   6b. Transcript (WORLD-10) — `message` events become readable lines
+   Format is the contract one, exactly: [sim time] ROOM · Agent: note
+   ====================================================================== */
+const transcript = WorldTranscript.create();
+
+function transcriptContext() {
+  return {
+    t0: SIM.t0,
+    secondsPerTick: secondsPerTick,
+    agentName: (id) => {
+      const agent = AGENT_BY_ID.get(id);
+      return agent ? agent.name : id;
+    },
+    roomName: (raw) => {
+      const roomId = normalizeRoom(raw);
+      if (!roomId) return raw;                       // unknown room: show what the wire said
+      const room = ROOMS.get(roomId);
+      return room ? room.name : roomId;
+    },
+    isMeetingRoom: (raw) => normalizeRoom(raw) === 'meeting_room'
+  };
+}
+
+/* "in the meeting room right now" — read from the live snapshot, never remembered. */
+function inMeetingRoomNow(agentId) {
+  const a = world.agents.get(agentId);
+  return !!(a && a.room === 'meeting_room');
+}
+
+function applyEvents(events) {
+  if (!Array.isArray(events)) return false;
+  return WorldTranscript.ingest(transcript, events, transcriptContext()).length > 0;
+}
+
+function renderTranscript() {
+  const list = $('#transcript');
+  if (!list) return;
+  const rows = WorldTranscript.rows(transcript);
+  list.textContent = '';
+  rows.forEach((row) => {
+    const li = document.createElement('li');
+    const live = row.meeting && inMeetingRoomNow(row.agentId);
+    li.className = 't-row' + (row.meeting ? ' is-meeting' : '') + (live ? ' is-live' : '');
+    li.dataset.tick = row.tick === null ? '' : String(row.tick);
+    li.dataset.agent = row.agentId;
+    li.dataset.room = row.roomId;
+    li.dataset.meeting = row.meeting ? '1' : '0';
+    li.dataset.live = live ? '1' : '0';
+    li.title = row.line;
+    li.textContent = row.line;
+    list.appendChild(li);
+  });
+  $('#chat-count').textContent = String(rows.length);
+  const empty = $('#chat-empty');
+  if (empty) empty.hidden = rows.length > 0;
+}
+
+/* ======================================================================
    7. Render — one path, always from the model
    ====================================================================== */
 function render() {
   const simNow = simDate(world.tick);
+  paintRate();
   $('#clock').textContent = hhmmss(simNow);
   $('#clock').dateTime = simNow ? simNow.toISOString() : '';
   $('#tick').textContent = world.tick === null ? '—' : world.tick;
@@ -565,6 +764,7 @@ function render() {
 
   renderDetail(simNow);
   renderPlan(simNow);
+  renderTranscript();
 }
 
 function renderDetail(simNow) {
@@ -699,14 +899,18 @@ function connect() {
       case 'patch':                       // contract §9.2
         if (Number.isInteger(msg.tick)) world.tick = msg.tick;
         if (Number.isInteger(msg.last_event_seq)) world.lastEventSeq = msg.last_event_seq;
+        setSimScale(msg.sim_seconds_per_tick);
         if (Array.isArray(msg.agents)) applyAgents(msg.agents, msg.tick);
+        applyEvents(msg.events);
         render();
         break;
       case 'delta':                       // engine W2 shape: coalesced agent patches
         if (Number.isInteger(msg.tick)) world.tick = msg.tick;
+        setSimScale(msg.sim_seconds_per_tick);
         if ('meeting' in msg) world.meeting = msg.meeting || null;
         if (Array.isArray(msg.patches)) applyAgents(msg.patches, msg.tick);
         if (Array.isArray(msg.agents)) applyAgents(msg.agents, msg.tick);
+        applyEvents(msg.events);          // WORLD-10: message events -> transcript
         render();
         break;
       case 'ping':                        // keepalive, nothing to draw

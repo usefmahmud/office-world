@@ -80,6 +80,40 @@ def test_ingest_requires_fields():
         assert r.status_code == 422
 
 
+def test_snapshot_carries_the_tail_of_the_conversation():
+    """WORLD-10: a client that connects (or reloads) late still renders the transcript."""
+    with make_client() as client:
+        state = client.get("/api/world/state").json()
+        assert isinstance(state["recent_messages"], list)
+
+        note = "ping from the reload path"
+        posted = client.post(
+            "/api/world/events",
+            json={"agent": "yassin", "type": "message", "room": "desk-yassin", "note": note},
+        )
+        assert posted.status_code == 200
+
+        after = client.get("/api/world/state").json()
+        history = after["recent_messages"]
+        assert history[-1]["note"] == note
+        assert history[-1]["type"] == "message"
+        assert all(m["type"] == "message" for m in history), "history carries messages only"
+
+
+def test_snapshot_history_is_bounded():
+    from app.world import RECENT_MESSAGES
+
+    with make_client() as client:
+        for i in range(RECENT_MESSAGES + 5):
+            client.post(
+                "/api/world/events",
+                json={"agent": "hakim", "type": "message", "room": "desk-hakim", "note": f"line {i}"},
+            )
+        history = client.get("/api/world/state").json()["recent_messages"]
+    assert len(history) == RECENT_MESSAGES
+    assert history[-1]["note"] == f"line {RECENT_MESSAGES + 4}"
+
+
 def test_websocket_snapshot_then_delta():
     with make_client() as client:
         with client.websocket_connect("/ws/world") as ws:

@@ -2,12 +2,15 @@
 # Agents Office World — dayplan.yaml
 # The contract. Machine-readable source of truth for every wave.
 # Prose rules: docs/CONTRACT.md · acceptance: docs/AC.md
-# Frozen v1.0.0 · WORLD-1 · owner: maryam
+# Frozen v1.1.0 · WORLD-1 · owner: maryam
 # Any change to a name / field / type / enum value / edge = contract change:
 # bump `version`, one ticket, update docs/AC.md in the same commit.
+# v1.1.0 (WORLD-9/WORLD-10): the sim clock scale became explicit and adjustable
+#   (`sim.tick_seconds` is the default of WORLD_SIM_SECONDS_PER_TICK), and the
+#   transcript panel consumes `message` events. No enum, id or edge changed.
 # =============================================================================
 
-version: "1.0.0"
+version: "1.1.0"
 contract:
   ticket: WORLD-1
   wave: W0
@@ -21,11 +24,13 @@ contract:
 # 1. SIM CLOCK  (determinism rules DT-2, DT-6)
 # -----------------------------------------------------------------------------
 sim:
-  tick_seconds: 1              # 1 Hz; a tick is the only clock the world has
-  t0: "2026-01-05T09:00:00Z"   # wall clock is DERIVED: ts = t0 + tick * 1s
+  tick_seconds: 60             # sim seconds per tick; DEFAULT of WORLD_SIM_SECONDS_PER_TICK
+                               # (v1.1.0/WORLD-9: one tick = one simulated minute, so a
+                               # 9 h day is 540 ticks and ~18 min of wall time at TICK=2)
+  t0: "2026-01-05T09:00:00Z"   # wall clock is DERIVED: ts = t0 + tick * tick_seconds
   day_start: "09:00"           # local sim time
   day_end: "18:00"
-  day_length_ticks: 32400      # (18:00 - 09:00) * 3600
+  day_length_ticks: 540        # (18:00 - 09:00) * 3600 / tick_seconds
   seed: 42                     # default; per-room/per-run override allowed
   rng:
     mode: per_agent_per_tick_per_purpose

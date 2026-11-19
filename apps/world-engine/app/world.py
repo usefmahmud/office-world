@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,12 +53,25 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+#: How many `message` events the snapshot carries back to a fresh client.
+RECENT_MESSAGES = 30
+
+
 class World:
     """Deterministic projection of the real ledger."""
 
-    def __init__(self, seed: int = 7, state_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        seed: int = 7,
+        state_dir: str | None = None,
+        clock: Callable[[int], str] | None = None,
+    ) -> None:
         self.seed = seed
         self.tick = 0
+        # DT-2: an event's `ts` is derived from its tick. The engine injects the
+        # `t0 + tick * sim_seconds_per_tick` clock; a bare World keeps the wall clock
+        # so a caller that has no contract in hand still gets a timestamp.
+        self.clock: Callable[[int], str] = clock or (lambda tick: _now())
         self.agents: dict[str, Agent] = {
             sid: Agent(spec.id, spec.name, spec.role, spec.desk_room)
             for sid, spec in default_roster().items()
@@ -65,6 +79,9 @@ class World:
         self.meeting: Meeting | None = None
         self.rejections: list[Rejection] = []
         self.log_path: Path | None = None
+        # The last few `message` events, so a client that connects (or reloads) can
+        # render the transcript without waiting for the next delta. Bounded, ordered.
+        self.recent_messages: list[dict] = []
         if state_dir:
             d = Path(state_dir)
             d.mkdir(parents=True, exist_ok=True)
@@ -75,7 +92,7 @@ class World:
         return {
             "tick": self.tick,
             "seed": self.seed,
-            "ts": _now(),
+            "ts": self.clock(self.tick),
             "agents": [self._agent_dict(a) for a in self.agents.values()],
             "meeting": self.meeting.as_dict() if self.meeting else None,
             "counts": self.counts(),
@@ -132,22 +149,23 @@ class World:
             agent.since_tick = self.tick
         if ticket is not None:
             agent.ticket = ticket if target in ("working", "review") else None
-        if target == "meeting":
-            agent.room = "meeting-room"
-        elif target == "break":
-            agent.room = "coffee-corner"
-        elif target in ("working", "review"):
-            agent.room = agent.desk_room
-        elif target == "idle":
-            agent.room = agent.desk_room
-
-        if event_type == "task_start" or event_type == "meeting_open":
-            if room:
+        # `message` is a self-loop (contract §3): it never moves anybody, so the
+        # post-event room is the room the agent was already in.
+        if event_type != "message":
+            if target == "meeting":
+                agent.room = "meeting-room"
+            elif target == "break":
+                agent.room = "coffee-corner"
+            elif target in ("working", "review"):
+                agent.room = agent.desk_room
+            elif target == "idle":
+                agent.room = agent.desk_room
+            if event_type in ("task_start", "meeting_open") and room:
                 agent.room = room
 
         event = {
             "tick": self.tick,
-            "ts": _now(),
+            "ts": self.clock(self.tick),
             "type": event_type,
             "agent": agent_id,
             "from": prev,
@@ -157,6 +175,9 @@ class World:
             "note": note,
             "source": source,
         }
+        if event_type == "message":
+            self.recent_messages.append(event)
+            self.recent_messages = self.recent_messages[-RECENT_MESSAGES:]
         if persist:
             self._append(event)
         return event
@@ -213,6 +234,9 @@ class World:
                 agent.ticket = event.get("ticket")
                 if event.get("room"):
                     agent.room = event["room"]
+                if event.get("type") == "message":
+                    self.recent_messages.append(event)
+                    self.recent_messages = self.recent_messages[-RECENT_MESSAGES:]
                 applied += 1
         return applied
 

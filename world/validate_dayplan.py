@@ -86,6 +86,15 @@ def main(path: Path) -> int:
     stations, mv, sm = doc["stations"], doc["movement"], doc["state_machine"]
     events, schedule, codes = doc["events"], doc["schedule"], doc["codes"]
 
+    # ---- 0b. sim clock (DT-2: ts = t0 + tick * tick_seconds) ---------------
+    tick_seconds = sim.get("tick_seconds")
+    day_seconds = (minutes(sim["day_end"]) - minutes(sim["day_start"])) * 60
+    check(isinstance(tick_seconds, int) and tick_seconds >= 1, "AC-W0-10",
+          f"sim.tick_seconds must be a positive int, got {tick_seconds!r}")
+    check(doc["sim"]["day_length_ticks"] * tick_seconds == day_seconds, "AC-W0-10",
+          f"day_length_ticks {doc['sim']['day_length_ticks']} x tick_seconds {tick_seconds} "
+          f"!= the {day_seconds}s simulated day between {sim['day_start']} and {sim['day_end']}")
+
     # ---- 1. agents --------------------------------------------------------
     a_ids = [a["id"] for a in agents]
     check(len(agents) == 6, "AC-W0-01", f"agents: expected 6, got {len(agents)}")

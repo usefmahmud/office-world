@@ -1,4 +1,4 @@
-# Agents Office World — Acceptance Criteria (v1.0.0)
+# Agents Office World — Acceptance Criteria (v1.1.0)
 
 Companion to `docs/CONTRACT.md` and `world/dayplan.yaml`. One rule for this file: **every criterion is
 checkable by a named command**, and "met" means that command was run and printed what it should.
@@ -13,7 +13,7 @@ status is `met` / `pending` / `blocked` (blocked = waits on the owner's decision
 
 | id | criterion | check command | status |
 |---|---|---|---|
-| **AC-W0-01** | `dayplan.yaml` parses and matches its own schema: exactly 6 agents, 5 rooms, 8 event types, 5 states in the frozen order, `initial: idle`, canonical cycle `idle→working→review→break→meeting→idle`, closed transition table | `python3 world/validate_dayplan.py` → exit 0, `OK — 240 contract checks passed` | **met** |
+| **AC-W0-01** | `dayplan.yaml` parses and matches its own schema: exactly 6 agents, 5 rooms, 8 event types, 5 states in the frozen order, `initial: idle`, canonical cycle `idle→working→review→break→meeting→idle`, closed transition table | `python3 world/validate_dayplan.py` → exit 0, `OK — 242 contract checks passed` | **met** |
 | **AC-W0-02** | `CONTRACT.md` carries the envelope field table, 8 payload sections, 14 error codes, and every event key is documented with a type | `grep -c '^### 5\.' docs/CONTRACT.md` → `8` · `grep -c '^\| \`W-' docs/CONTRACT.md` → `14` | **met** |
 | **AC-W0-03** | the transition table and the event catalogue agree: each of the 8 types appears exactly once, its `to_state` equals the table's `to`, every `from_state` is a real state | `python3 world/validate_dayplan.py` (checks tagged `AC-W0-03`) | **met** |
 | **AC-W0-04** | `task_id` rules are total and non-contradictory: required on `task_start`/`task_done`/`handoff`, forbidden on `meeting_open`/`meeting_close`/`break`/`idle`, optional on `message`; pattern accepts `WORLD-1`, rejects `world-1` | `python3 world/validate_dayplan.py` (tag `AC-W0-04`) | **met** |
@@ -22,6 +22,7 @@ status is `met` / `pending` / `blocked` (blocked = waits on the owner's decision
 | **AC-W0-07** | layout and day plan are physically possible: 6 distinct desks inside the bullpen rect, every schedule entry inside 09:00–18:00 and chronologically ordered, participants fit room capacity, `planned_ticks` inside the payload min/max, day opens with `task_start` and closes on `idle` | `python3 world/validate_dayplan.py` (tag `AC-W0-07`) | **met** |
 | **AC-W0-08** | the four downstream owners confirm in a ticket comment that they can build against `v1.0.0` without changing a name (omar W1 · layla W1 · yassin W2 · salim W4) | 4 comments on WORLD-1, one per owner | **pending** |
 | **AC-W0-09** | negative proof — the lint is not vacuous: breaking the contract makes it fail | `world/validate_dayplan.py <mutated copy>` for 5 mutations → exit 1 each | **met** (5/5) |
+| **AC-W0-10** | the sim clock is one consistent scale: `tick_seconds` is a positive integer and `day_length_ticks × tick_seconds` equals the simulated day between `day_start` and `day_end` | `python3 world/validate_dayplan.py` (tag `AC-W0-10`); `pytest world/validate_dayplan.py` mutations: `tick_seconds: 0` and `day_length_ticks: 32400` with 60 s/tick → exit 1 | **met** |
 
 **W0 does not close on file existence.** It closes when AC-W0-08 lands. The files being green is
 necessary, not sufficient — a contract nobody has read is a suggestion.
@@ -64,6 +65,8 @@ necessary, not sufficient — a contract nobody has read is a suggestion.
 | **AC-W3-04** | 30 fps sustained and < 150 MB RSS for the page on the 2 vCPU box | `performance` trace + `docker stats` | pending |
 | **AC-W3-05** | mission-control wall: 6 rows × ticket key × status × time-in-state, driven by the same snapshot | DOM text assertion per row | pending |
 | **AC-W3-06** | clicking an agent opens a panel with its `task_id`, elapsed ticks and next milestone; empty state is explicit, never a blank box | click each dot → panel visible with 3 fields | pending |
+| **AC-W3-07** | the transcript panel renders every `message` event as `[HH:MM:SS] ROOM · Agent: text`, newest first, capped at 60, meeting-room lines highlighted, and the "live" mark follows who is in the meeting room *now* (WORLD-10) | `pytest apps/world-web/tests/test_transcript_panel.py -q` → 9 passed; browser: post `message` events → `#transcript li` texts equal the formatted lines | **met** |
+| **AC-W3-08** | the displayed clock advances exactly `sim_seconds_per_tick` per tick and reads the scale off the wire, so `WORLD_SIM_SECONDS_PER_TICK` changes the page (default 60 → one simulated minute per tick) | `pytest apps/world-web/tests/test_sim_clock.py apps/world-engine/tests/test_sim_speed.py -q`; browser: `#clock` at tick N and N+1 differ by 60 s | **met** |
 
 ---
 
@@ -115,6 +118,12 @@ necessary, not sufficient — a contract nobody has read is a suggestion.
 | same | `grep -rnE 'openai\|anthropic\|requests\|httpx\|socket\|datetime\.now\|time\.time\|urllib' world/` | no output (AC-W0-06) |
 | same | `grep -c '^### 5\.' docs/CONTRACT.md` / `grep -c '^\| \`W-' docs/CONTRACT.md` | `8` / `14` (AC-W0-02) |
 | same | `ls docker-compose.y*ml Dockerfile` | no output — no deploy artifact in W0 |
+| `2026-11-19T12:46Z` on `feat/WORLD-9-speed` | `python3 world/validate_dayplan.py` | `agents=6 rooms=5 event_types=8 states=5 schedule_entries=8` · `OK — 242 contract checks passed (W-CFG-01 clean)` · exit 0 (AC-W0-01, AC-W0-10) |
+| same | `python -m pytest -q` (root `pytest.ini`) | `162 passed, 1 warning, 6 subtests passed` in 3.0 s — 133 pre-existing + `test_sim_speed.py` 12 + `test_transcript_panel.py` 9 + `test_sim_clock.py` 6 + 2 in `test_api.py` |
+| same | `python apps/world-web/contract_projection.py --check` | `OK — index.html contract block matches world/dayplan.yaml` (contract v1.1.0, `tick_seconds` 60, `day_length_ticks` 540) |
+| same | engine + page on `127.0.0.1:8099`, `message`/`meeting_*` events posted to `POST /api/world/events` | `#transcript` printed `[09:11:00] Meeting Room · Omar: transcript panel is live` and `[09:12:00] Meeting Room · Maryam: and it highlights the attendees` with `is-meeting is-live`; a bullpen line stayed plain; after `meeting_close` Omar's line kept `is-meeting` and lost `is-live` (AC-W3-07) |
+| same | same run, `#clock` sampled at tick 20 and tick 23 | `09:20:00` → `09:23:00` (60 s per tick), `#rate` = `60 s/tick`, 0 console errors, `contract warnings: 0` (AC-W3-08) |
+| same | 1440×900 and 780×437 layout probes | transcript list inside its panel, day plan below it, panel inside the aside, page does not scroll at 1440×900 (`scrollH` 900) |
 
 Environment note: the lint needs PyYAML. `/usr/bin/python3` (3.12) has it; the default `python3` (3.14)
 on this host does not. **W1 must add `pyyaml` to dev requirements** so `python3 world/validate_dayplan.py`
@@ -122,4 +131,4 @@ works without an absolute interpreter path — that gap belongs to AC-W1-03's to
 
 ---
 
-*v1.0.0 · WORLD-1 · the criterion is the command, not the story.*
+*v1.1.0 · WORLD-1 · the criterion is the command, not the story.*

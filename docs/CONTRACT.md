@@ -1,4 +1,4 @@
-# Agents Office World — World Contract (v1.0.0)
+# Agents Office World — World Contract (v1.1.0)
 
 **Status:** `FROZEN` — this document plus `world/dayplan.yaml` is the single reference every wave
 builds against.
@@ -7,6 +7,13 @@ W4 life, W5 ship.
 **Change rule:** any change to a name, a field, a type, an enum value or an edge in this contract is a
 **contract change**: bump `version` in `world/dayplan.yaml`, open one ticket, and update `docs/AC.md`
 in the same commit. Renames are breaking; additions are a minor bump; removals are a major bump.
+
+**v1.1.0 (WORLD-9 + WORLD-10)** — two additions, no rename, no removed edge:
+`sim.tick_seconds` became the *adjustable* sim clock scale (default **60** simulated seconds per tick,
+overridable with `WORLD_SIM_SECONDS_PER_TICK`, `day_length_ticks` follows it: 540), and the renderer
+gained a transcript panel fed by `message` events (§9.3). The five states, five rooms, six agents,
+eight event types and every transition edge are unchanged.
+
 
 Machine-readable source of truth: **`world/dayplan.yaml`**. This document is the prose around it.
 If the two ever disagree, the YAML wins for values, this document wins for rules — and that disagreement
@@ -69,7 +76,7 @@ byte-identical, and each one has an acceptance criterion in `docs/AC.md`.
 | # | Rule | Why it is a contract rule |
 |---|---|---|
 | **DT-1** | `step()` performs **no I/O** — no network, no disk, no clock, no `random` module globals, no environment reads. Inputs: state + config. Outputs: new state + ordered event list. | Testable in isolation, 10 000 ticks in milliseconds |
-| **DT-2** | `ts` is **derived**, never read: `ts = t0 + tick * tick_seconds`, `t0` fixed in `dayplan.yaml`. No `datetime.now()` anywhere under `world/`. | Wall-clock time breaks replay on a different day |
+| **DT-2** | `ts` is **derived**, never read: `ts = t0 + tick * tick_seconds`, `t0` fixed in `dayplan.yaml`. `tick_seconds` is the default of `WORLD_SIM_SECONDS_PER_TICK` (60 in v1.1.0), so the engine and the clock both read one scale. No `datetime.now()` anywhere under `world/` or in any event the engine writes. | Wall-clock time breaks replay on a different day |
 | **DT-3** | Coordinates are **integers** (pixels). No float accumulation in positions. | Float drift makes the golden hash unstable across platforms |
 | **DT-4** | RNG is **per-agent, per-tick, per-purpose**: `Random(sha256(f"{seed}|{agent}|{tick}|{purpose}"))`. One generator is never shared between agents or purposes. | Shared RNG makes output depend on call order |
 | **DT-5** | Iteration is over **ordered sequences** (the `agents`/`rooms` lists in YAML), never over `set` or bare `dict` keys, in any code path that emits events. | Hash randomization reorders sets between processes |
@@ -336,6 +343,27 @@ the renderer must reject unknown `type` values and keep drawing.
 
 ---
 
+### 9.3 v1.1.0 engine extensions (WORLD-9 + WORLD-10)
+
+Additive fields; a v1.0.0 client ignores them and keeps drawing.
+
+| field | where | type | meaning |
+|---|---|---|---|
+| `sim_seconds_per_tick` | snapshot, every `delta`/`patch`, `GET /api/world/contract` | `number` | the live scale read from `WORLD_SIM_SECONDS_PER_TICK` (default `60`); the client must derive its clock with it instead of assuming 1 s/tick |
+| `sim_time` | snapshot, every `delta` | `str` | `t0 + tick * sim_seconds_per_tick`, ISO-8601 UTC — the same value as `ts` (DT-2) |
+| `recent_messages` | `GET /api/world/state` snapshot | `event[]` | the last ≤ 30 `message` events, oldest first; a client that connects late renders the transcript from it before the first delta |
+| `events` | every `delta` | `event[]` | the events applied in that tick/frame, including `message` |
+
+**Transcript rendering rule (WORLD-10).** A `message` event becomes exactly one line:
+`[HH:MM:SS] ROOM · Agent: text`, where the time is derived from the event's `tick` and the live
+scale, `ROOM`/`Agent` are the contract names (an unknown id is printed as the wire spelled it), and
+`text` is `payload.text`/the event `note`. Lines are ordered newest first, capped at 60. A line from
+`meeting_room` is marked as a meeting line, and it is marked **live** when the speaker is in the
+meeting room *now* — that flag is recomputed from the current snapshot, never remembered from the
+moment the message arrived.
+
+---
+
 ## 10. Acceptance criteria per wave
 
 Full, checkable list with commands: **`docs/AC.md`**. The gate per wave:
@@ -366,7 +394,9 @@ can build against it. It does not close when the files merely exist.
 | **D-06** | `ts` is derived from `t0 + tick` | DT-2; a replay tomorrow must produce today's file |
 | **D-07** | Illegal transitions are counted, not dropped silently | `W-STATE-01` counts appear in the drift report — a lie is visible |
 | **D-08** | v1 has no pathfinding, needs, moods, 3D, LLM chatter | frozen scope (PLAN §7); anything else goes to `v2-backlog.md` |
+| **D-09** | the sim clock scale is one env-backed number: `sim.tick_seconds` is the default of `WORLD_SIM_SECONDS_PER_TICK` (**60**), and `day_length_ticks = (day_end - day_start) * 3600 / tick_seconds` | the owner asked for a faster day; a hardcoded 1 s/tick meant 9 h of wall clock for one day. One scale in the YAML, read by the engine and by the page, keeps the clock, the day plan and the golden log in agreement (WORLD-9) |
+| **D-10** | the transcript is built from `message` events only, and the snapshot carries the last 30 of them | the owner wants to read the conversation, not a second state machine. `message` is already a self-loop in §4, so a transcript cannot move anybody; the snapshot tail means a reload is not blank (WORLD-10) |
 
 ---
 
-*v1.0.0 · frozen 2026-11-19 · WORLD-1 · the world may be wrong, but it may not be invented.*
+*v1.1.0 · frozen 2026-11-19 · WORLD-1 · the world may be wrong, but it may not be invented.*

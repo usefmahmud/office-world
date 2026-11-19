@@ -21,11 +21,22 @@ world only moves along `idle → working → review → break → meeting → id
 
 | Env | Default | Meaning |
 |---|---|---|
-| `TICK` | `2` | seconds between ticks |
+| `TICK` | `2` | real seconds between ticks (how fast the loop runs) |
+| `WORLD_SIM_SECONDS_PER_TICK` | `60` | simulated seconds one tick stands for — the clock scale the page reads (WORLD-9) |
+| `WORLD_SIM_T0` | `2026-01-05T09:00:00Z` | contract `sim.t0`; every timestamp is `t0 + tick × sim_seconds_per_tick` |
 | `WORLD_SEED` | `7` | seed for the deterministic day plan |
 | `WORLD_STATE_DIR` | unset | directory for the append-only `events.jsonl` (replayed on boot) |
 | `WORLD_TOKEN` | unset | when set, `X-World-Token` is required on POST routes |
 | `WORLD_ALLOW_MANUAL_TICK` | `0` | enables `POST /api/world/tick` (tests only) |
+
+With the defaults (`TICK=2`, `WORLD_SIM_SECONDS_PER_TICK=60`) one simulated minute passes per tick,
+so the 09:00–18:00 day (540 ticks) plays out in about 18 minutes of wall time.
+
+## Snapshot extensions for the renderer
+
+`GET /api/world/state` also carries `sim_time`, `sim_seconds_per_tick` and `recent_messages`
+(the last ≤ 30 `message` events, oldest first) so the page can draw the clock and the transcript
+without a second source; every `delta` carries `events`, the events applied in that frame.
 
 ## Tests
 

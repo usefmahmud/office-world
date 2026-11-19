@@ -11,6 +11,7 @@ services:
     container_name: world-engine
     environment:
       TICK: "${TICK:-2}"
+      WORLD_SIM_SECONDS_PER_TICK: "${WORLD_SIM_SECONDS_PER_TICK:-60}"
       WORLD_SEED: "${WORLD_SEED:-7}"
       WORLD_STATE_DIR: /data
       WORLD_TOKEN: "${WORLD_TOKEN:-}"
