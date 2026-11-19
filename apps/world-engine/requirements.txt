@@ -1,6 +1,6 @@
 # world-engine runtime deps (installed in the engine container image)
-fastapi>=0.110
-uvicorn[standard]>=0.29
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
 # test-only
 pytest>=8
 httpx>=0.27

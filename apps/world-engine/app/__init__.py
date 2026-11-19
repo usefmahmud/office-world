@@ -3,3 +3,5 @@
 Kept import-light on purpose: submodules (``app.routers.*``) are mounted by the
 engine entrypoint, so this file must not import FastAPI itself.
 """
+
+__version__ = "0.1.0"

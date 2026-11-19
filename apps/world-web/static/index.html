@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agents Office World — engine check</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+         background:#0c1014; color:#c9d6e2; padding:24px; }
+  h1 { font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:#7fd1ff; margin:0 0 4px; }
+  .sub { color:#64798c; margin-bottom:20px; }
+  .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); max-width:1000px; }
+  .desk { border:1px solid #1d2a36; border-radius:10px; padding:10px 12px; background:#101821; }
+  .desk .name { font-weight:600; color:#e7f1fa; }
+  .desk .role { color:#5d7387; font-size:12px; }
+  .state { display:inline-block; margin-top:8px; padding:2px 8px; border-radius:999px;
+           font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+  .idle { background:#1b232c; color:#8aa0b3; }
+  .working { background:#0f3323; color:#5ee39b; }
+  .review { background:#33290f; color:#e9c46a; }
+  .break { background:#2b1f33; color:#c79bf0; }
+  .meeting { background:#0f2a3a; color:#67c9f5; }
+  .meta { margin-top:6px; font-size:11px; color:#4f6478; }
+  .bar { max-width:1000px; display:flex; gap:16px; align-items:center;
+         margin-bottom:14px; color:#5d7387; font-size:12px; }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; background:#c0392b; margin-right:6px; }
+  .dot.on { background:#2ecc71; box-shadow:0 0 8px #2ecc71; }
+</style>
+</head>
+<body>
+  <h1>Agents Office World</h1>
+  <div class="sub">PROVISIONAL ENGINE CHECK — the real SVG floor is W3 (Omar/Maryam).</div>
+  <div class="bar">
+    <span><span id="dot" class="dot"></span><span id="link">connecting…</span></span>
+    <span>tick <b id="tick">–</b></span>
+    <span>seed <b id="seed">–</b></span>
+    <span id="meeting"></span>
+  </div>
+  <div id="grid" class="grid"></div>
+
+<script>
+const grid  = document.getElementById('grid');
+const tickEl = document.getElementById('tick');
+const seedEl = document.getElementById('seed');
+const linkEl = document.getElementById('link');
+const dotEl  = document.getElementById('dot');
+const meetEl = document.getElementById('meeting');
+const cards  = new Map();
+
+function card(a) {
+  let el = cards.get(a.id);
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'desk';
+    el.innerHTML = `<div class="name"></div><div class="role"></div>
+                    <div class="state"></div><div class="meta"></div>`;
+    grid.appendChild(el);
+    cards.set(a.id, el);
+  }
+  el.querySelector('.name').textContent = a.name;
+  el.querySelector('.role').textContent = a.role;
+  const st = el.querySelector('.state');
+  st.textContent = a.state;
+  st.className = 'state ' + a.state;
+  el.querySelector('.meta').textContent =
+    a.room + (a.ticket ? ' · ' + a.ticket : '') + ' · ' + a.since_tick;
+}
+
+function apply(snap) {
+  tickEl.textContent = snap.tick;
+  seedEl.textContent = snap.seed;
+  snap.agents.forEach(card);
+  meetEl.textContent = snap.meeting ? ('meeting: ' + snap.meeting.members.join(', ')) : '';
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/world`);
+  ws.onopen = () => { dotEl.classList.add('on'); linkEl.textContent = 'live'; };
+  ws.onclose = () => {
+    dotEl.classList.remove('on'); linkEl.textContent = 'reconnecting…';
+    setTimeout(connect, 2000);
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'snapshot') { apply(msg.world); return; }
+    if (msg.type === 'delta') {
+      tickEl.textContent = msg.tick;
+      (msg.patches || []).forEach(card);
+      meetEl.textContent = msg.meeting ? ('meeting: ' + msg.meeting.members.join(', ')) : '';
+    }
+  };
+}
+
+fetch('/api/world/state').then(r => r.json()).then(apply).catch(() => {});
+connect();
+</script>
+</body>
+</html>
