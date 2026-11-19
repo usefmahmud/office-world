@@ -21,4 +21,10 @@ apps/         # world-engine (FastAPI + WS) and world-web (static SVG floor)
 docs/         # contract (dayplan, events) and decisions
 ```
 
-See `docs/PLAN.md` for the full plan and `docs/CONTRACT.md` for the frozen event vocabulary.
+See `docs/PLAN.md` for the full plan, `docs/CONTRACT.md` for the frozen event vocabulary and rules,
+`world/dayplan.yaml` for the machine-readable contract, and `docs/AC.md` for the checkable acceptance
+criteria per wave.
+
+```bash
+python3 world/validate_dayplan.py   # contract lint; exit 0 = W0 contract is consistent
+```

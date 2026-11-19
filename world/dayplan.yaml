@@ -1,0 +1,390 @@
+# =============================================================================
+# Agents Office World — dayplan.yaml
+# The contract. Machine-readable source of truth for every wave.
+# Prose rules: docs/CONTRACT.md · acceptance: docs/AC.md
+# Frozen v1.0.0 · WORLD-1 · owner: maryam
+# Any change to a name / field / type / enum value / edge = contract change:
+# bump `version`, one ticket, update docs/AC.md in the same commit.
+# =============================================================================
+
+version: "1.0.0"
+contract:
+  ticket: WORLD-1
+  wave: W0
+  status: frozen
+  owner: maryam
+  frozen_at: "2026-11-19"
+  prose: docs/CONTRACT.md
+  acceptance: docs/AC.md
+
+# -----------------------------------------------------------------------------
+# 1. SIM CLOCK  (determinism rules DT-2, DT-6)
+# -----------------------------------------------------------------------------
+sim:
+  tick_seconds: 1              # 1 Hz; a tick is the only clock the world has
+  t0: "2026-01-05T09:00:00Z"   # wall clock is DERIVED: ts = t0 + tick * 1s
+  day_start: "09:00"           # local sim time
+  day_end: "18:00"
+  day_length_ticks: 32400      # (18:00 - 09:00) * 3600
+  seed: 42                     # default; per-room/per-run override allowed
+  rng:
+    mode: per_agent_per_tick_per_purpose
+    formula: "sha256(f'{seed}|{agent}|{tick}|{purpose}')"
+    shared_generator: false
+  determinism:
+    pure_step: true            # step(state, config) -> (state', events)
+    io_in_step: false
+    wall_clock_in_step: false
+    coords: int
+    iterate: ordered_lists
+    golden_ticks: 10000
+    golden_file: world/tests/golden/seed42-10k.sha256
+
+# -----------------------------------------------------------------------------
+# 2. AGENTS  (exactly six, declaration order = tie-break order for same-tick events)
+# -----------------------------------------------------------------------------
+agents:
+  - id: hakim
+    name: "Hakim"
+    role: orchestration
+    desk: D1
+    home_room: bullpen
+    secondary_room: meeting_room
+    tone: terse, directive
+    shift: ["09:00", "18:00"]
+  - id: layla
+    name: "Layla"
+    role: lifecycle
+    desk: D2
+    home_room: bullpen
+    secondary_room: meeting_room
+    tone: warm, scheduling-minded
+    shift: ["09:05", "18:00"]
+  - id: maryam
+    name: "Maryam"
+    role: delivery
+    desk: D3
+    home_room: bullpen
+    secondary_room: review_corner
+    tone: crisp, evidence-first
+    shift: ["09:10", "18:00"]
+  - id: omar
+    name: "Omar"
+    role: development
+    desk: D4
+    home_room: bullpen
+    secondary_room: review_corner
+    tone: dry, technical
+    shift: ["09:15", "18:00"]
+  - id: salim
+    name: "Salim"
+    role: research
+    desk: D5
+    home_room: bullpen
+    secondary_room: reading_room
+    tone: curious, cites sources
+    shift: ["09:20", "18:00"]
+  - id: yassin
+    name: "Yassin"
+    role: infrastructure
+    desk: D6
+    home_room: bullpen
+    secondary_room: review_corner
+    tone: factual, capacity-first
+    shift: ["09:25", "18:00"]
+
+# -----------------------------------------------------------------------------
+# 3. ROOMS  (exactly five, one floor, canvas 1200x700 px, integer coords)
+# -----------------------------------------------------------------------------
+rooms:
+  - id: bullpen
+    name: "Bullpen"
+    kind: open_floor
+    capacity: 6
+    rect: {x: 40, y: 40, w: 720, h: 400}
+    anchor: {x: 740, y: 240}          # doorway used as the room-to-room waypoint
+    default: true
+  - id: meeting_room
+    name: "Meeting Room"
+    kind: meeting
+    capacity: 6
+    rect: {x: 800, y: 40, w: 360, h: 240}
+    anchor: {x: 830, y: 160}
+  - id: review_corner
+    name: "Review Corner"
+    kind: review
+    capacity: 2
+    rect: {x: 800, y: 320, w: 360, h: 120}
+    anchor: {x: 830, y: 380}
+  - id: kitchen
+    name: "Kitchen"
+    kind: break
+    capacity: 4
+    rect: {x: 40, y: 470, w: 480, h: 180}
+    anchor: {x: 500, y: 560}
+  - id: reading_room
+    name: "Reading Room"
+    kind: focus
+    capacity: 2
+    rect: {x: 560, y: 470, w: 600, h: 180}
+    anchor: {x: 600, y: 560}
+
+# Desks live inside the bullpen; the seat point is also the agent's resting point.
+stations:
+  - {id: D1, agent: hakim,  room: bullpen, x: 120, y: 140}
+  - {id: D2, agent: layla,  room: bullpen, x: 320, y: 140}
+  - {id: D3, agent: maryam, room: bullpen, x: 520, y: 140}
+  - {id: D4, agent: omar,   room: bullpen, x: 120, y: 300}
+  - {id: D5, agent: salim,  room: bullpen, x: 320, y: 300}
+  - {id: D6, agent: yassin, room: bullpen, x: 520, y: 300}
+
+# -----------------------------------------------------------------------------
+# 4. MOVEMENT  (straight lines only; no pathfinding in v1)
+# -----------------------------------------------------------------------------
+movement:
+  canvas: {w: 1200, h: 700}
+  speed_px_per_tick: 8
+  mode: straight_line
+  waypoints: room_anchor          # here -> anchor(A) -> anchor(B) -> target (max 3 segments)
+  collision: false
+  pathfinding: false
+  positions_in: state             # events carry room+state only; x,y interpolated (DT-3/DT-5)
+
+# -----------------------------------------------------------------------------
+# 5. STATE MACHINE  (frozen by the brief)
+#    canonical cycle: idle -> working -> review -> break -> meeting -> idle
+# -----------------------------------------------------------------------------
+state_machine:
+  initial: idle
+  states: [idle, working, review, break, meeting]
+  canonical_cycle: [idle, working, review, break, meeting, idle]
+  closed: true                    # (type, from_state) not listed => W-STATE-01
+  transitions:
+    - {type: task_start,    from: [idle, review],                                to: working}
+    - {type: task_done,     from: [working],                                     to: review}
+    - {type: message,       from: [idle, working, review, break, meeting],       to: null}   # self-loop
+    - {type: meeting_open,  from: [idle, working, review, break],                to: meeting}
+    - {type: meeting_close, from: [meeting],                                     to: idle}
+    - {type: break,         from: [working, review],                             to: break}
+    - {type: handoff,       from: [working, review],                             to: null}   # self-loop
+    - {type: idle,          from: [idle, working, review, break, meeting],       to: idle}
+  timeouts:
+    idle:    {max_ticks: 900,  max_human: "15m", recovery: next_ticket_in_work_hours}
+    working: {max_ticks: 1500, max_human: "25m", recovery: message_or_handoff}
+    review:  {max_ticks: 600,  max_human: "10m", recovery: break_or_task_start}
+    break:   {max_ticks: 1200, max_human: "20m", recovery: back_to_work}
+    meeting: {max_ticks: 3600, max_human: "60m", recovery: meeting_close}
+  task_id:
+    required_on: [task_start, task_done, handoff]
+    forbidden_on: [meeting_open, meeting_close, break, idle]
+    optional_on: [message]
+    pattern: "^[A-Z][A-Z0-9]*-\\d+$"
+
+# -----------------------------------------------------------------------------
+# 6. EVENT SCHEMA  (closed vocabulary of eight; one event = one transition)
+# -----------------------------------------------------------------------------
+events:
+  log: events.jsonl
+  format: jsonl                   # one object per line, append-only
+  count: 8
+  ordering:
+    by: [agent_declaration_order, rule_priority]
+    seq: gapless_monotonic_from_1
+  envelope:
+    seq:     {type: int,  required: true,  note: "gapless, monotonic, starts at 1"}
+    tick:    {type: int,  required: true,  min: 0}
+    ts:      {type: str,  required: true,  format: "ISO-8601 UTC, derived = t0 + tick"}
+    agent:   {type: str,  required: true,  enum_ref: agents}
+    type:    {type: str,  required: true,  enum: [task_start, task_done, message, meeting_open, meeting_close, break, handoff, idle]}
+    room:    {type: str,  required: true,  enum_ref: rooms, note: "room AFTER the event"}
+    state:   {type: str,  required: true,  enum: [idle, working, review, break, meeting], note: "state AFTER the event"}
+    task_id: {type: "str|null", required: true, key_always_present: true}
+    target:  {type: "str|null", required: true, key_always_present: true}
+    payload: {type: object, required: true, note: "shape fixed per type; unknown keys => W-EVT-03"}
+  types:
+    task_start:
+      to_state: working
+      post_room: home_or_ticket_room
+      payload:
+        title:    {type: str, required: true, min_len: 1, max_len: 120}
+        source:   {type: str, required: true, enum: [atlas, queue]}
+        priority: {type: str, required: false, enum: [low, normal, high], default: normal}
+    task_done:
+      to_state: review
+      post_room: review_corner_or_bullpen
+      payload:
+        duration_ticks: {type: int, required: true, min: 1}
+        artifact:       {type: str, required: false}
+        result:         {type: str, required: true, enum: [ok, blocked]}
+    message:
+      to_state: null
+      constraint: "sender and target must share a room"
+      payload:
+        text:        {type: str, required: true, min_len: 1, max_len: 280}
+        text_source: {type: str, required: true, enum: [template, cached, human]}   # llm is illegal in-loop
+        about:       {type: str, required: false, enum: [task, meeting, break], default: task}
+    meeting_open:
+      to_state: meeting
+      post_room: meeting_room
+      payload:
+        topic:        {type: str, required: true, min_len: 1, max_len: 80}
+        participants: {type: "list[str]", required: true, min_items: 2, max_items: 6}
+        planned_ticks: {type: int, required: true, min: 60, max: 3600}
+    meeting_close:
+      to_state: idle
+      post_room: bullpen
+      payload:
+        actual_ticks: {type: int, required: true, min: 1}
+        decisions:    {type: "list[str]", required: false, max_items: 5}
+    break:
+      to_state: break
+      post_room: kitchen
+      payload:
+        kind:          {type: str, required: true, enum: [coffee, lunch, stretch]}
+        planned_ticks: {type: int, required: true, min: 60, max: 2700}
+    handoff:
+      to_state: null
+      constraint: "target required, target != agent"
+      payload:
+        reason: {type: str, required: true, enum: [review, blocked, expertise, shift_end]}
+        note:   {type: str, required: false, min_len: 1, max_len: 200}
+    idle:
+      to_state: idle
+      post_room: bullpen
+      payload:
+        reason:     {type: str, required: true, enum: [end_of_day, timeout, no_work]}
+        ticks_idle: {type: int, required: false, min: 0}
+
+# -----------------------------------------------------------------------------
+# 7. DAY SCHEDULE  (times are local sim time; ticks computed from 09:00)
+# -----------------------------------------------------------------------------
+schedule:
+  - id: S1
+    at: "09:00"
+    type: day_open
+    rule: every_agent
+    from_state: idle
+    emit: task_start
+    room: bullpen
+    note: "each agent walks to their desk and pulls the first ticket from the ledger"
+  - id: S2
+    at: "10:00"
+    type: meeting
+    topic: standup
+    room: meeting_room
+    participants: [hakim, layla, maryam, omar, salim, yassin]
+    planned_ticks: 900
+    emit: [meeting_open, meeting_close]
+  - id: S3
+    at: "13:00"
+    type: break
+    kind: lunch
+    room: kitchen
+    participants: all
+    planned_ticks: 2700
+  - id: S4
+    at: "13:45"
+    type: resume
+    rule: every_agent
+    emit: task_start
+    note: "continues the ticket interrupted by S3"
+  - id: S5
+    at: "15:30"
+    type: break
+    kind: coffee
+    room: kitchen
+    participants: [layla, salim, yassin]
+    planned_ticks: 900
+  - id: S6
+    at: "16:30"
+    type: review_sweep
+    room: review_corner
+    participants: [maryam]
+    emit: task_done
+    note: "PM walks to the review corner; tickets in review are the day's output"
+  - id: S7
+    at: "17:00"
+    type: meeting
+    topic: daily_review
+    room: meeting_room
+    participants: [hakim, layla, maryam, omar, salim, yassin]
+    planned_ticks: 1800
+    emit: [meeting_open, meeting_close]
+  - id: S8
+    at: "18:00"
+    type: day_close
+    rule: every_agent
+    emit: idle
+    payload_reason: end_of_day
+    note: "state machine lands on idle; the day's log stays append-only"
+
+# -----------------------------------------------------------------------------
+# 8. GUARDS  (rate limits and drift checks, enforced by the sim)
+# -----------------------------------------------------------------------------
+guards:
+  message_per_agent_ticks: 300      # <= 1 message / 5 min / agent
+  meeting_open_per_day: 3
+  break_per_agent_per_day: 4
+  handoff_per_agent_per_hour: 2
+  room_capacity_enforced: true
+  ledger_source: atlas
+  drift_check:
+    daily: true
+    compare: [rendered_state, atlas_tickets]
+    on_mismatch: W-DRIFT-01
+  aliveness:
+    state_change_per_10min: 1       # every agent moves at least once per 10 min
+    min_rooms_occupied: 2           # in any 60 min sample
+    min_inter_agent_events_30min: 3 # message | meeting_open | handoff
+    max_state_age_minutes: 25       # exception: meeting
+
+# -----------------------------------------------------------------------------
+# 9. CODES  (closed set; stable strings, fixed transport mapping)
+# -----------------------------------------------------------------------------
+codes:
+  - {code: W-EVT-01, http: 422, meaning: unknown event type}
+  - {code: W-EVT-02, http: 422, meaning: missing required field}
+  - {code: W-EVT-03, http: 422, meaning: bad type or unknown key}
+  - {code: W-EVT-04, http: 422, meaning: unknown agent/room/target or cross-room message}
+  - {code: W-EVT-05, http: 422, meaning: task_id required but null}
+  - {code: W-STATE-01, http: 409, meaning: illegal transition}
+  - {code: W-STATE-02, http: 409, meaning: state timeout}
+  - {code: W-CAP-01, http: 409, meaning: room capacity exceeded}
+  - {code: W-RATE-01, http: 429, meaning: rate limit exceeded}
+  - {code: W-SEQ-01, http: 500, meaning: seq gap or duplicate on replay}
+  - {code: W-DRIFT-01, http: 409, meaning: task_id not in ledger}
+  - {code: W-DRIFT-02, http: 0, meaning: idle beyond timeout in work hours}
+  - {code: W-CFG-01, http: 500, meaning: dayplan violates schema}
+  - {code: W-DET-01, http: 0, meaning: golden hash mismatch}
+
+# -----------------------------------------------------------------------------
+# 10. WIRE  (renderer contract)
+# -----------------------------------------------------------------------------
+wire:
+  snapshot:
+    http: GET /api/world/state
+    fields: [version, tick, sim_time, seed, agents, rooms, last_event_seq]
+  patches:
+    ws: /ws/world
+    rate_hz: 1
+    message: "{type: patch, tick, last_event_seq, agents: [changed agents only]}"
+    coalesce: per_agent_per_tick
+    keepalive: "{type: ping, tick} every 30s"
+    schema_rev: 1
+  health:
+    path: /health
+    ok: "200 {status: ok, tick, last_event_seq}"
+    stall: "503 if tick has not advanced for 30s"
+
+# -----------------------------------------------------------------------------
+# 11. OUT OF SCOPE FOR v1 (owner-frozen; v2-backlog.md)
+# -----------------------------------------------------------------------------
+out_of_scope:
+  - pathfinding
+  - needs_moods_hunger
+  - 3d_or_sprite_pipeline
+  - llm_in_tick_loop
+  - multi_floor
+  - mobile_app
+  - voice
+  - docker_deploy_without_owner_approval
