@@ -74,6 +74,7 @@
   .room-name{fill:#93a9bd; font-size:13px; letter-spacing:.14em; text-transform:uppercase}
   .room-kind{fill:var(--ink-faint); font-size:10px; letter-spacing:.1em; text-transform:uppercase}
   .room-anchor{fill:none; stroke:#2a3b4b; stroke-width:1; stroke-dasharray:3 4}
+  .room-live{fill:var(--break); font-size:10.5px; letter-spacing:.08em}
   .desk{fill:#14212c; stroke:#243646; stroke-width:1}
   .desk[data-empty="1"]{fill:#101820; stroke:#1b2833; opacity:.55}
   .desk-id{fill:var(--ink-faint); font-size:9.5px; letter-spacing:.12em}
@@ -377,15 +378,30 @@ function buildFloor() {
     rooms.appendChild(svgEl('rect', {
       x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'room-rect kind-' + room.kind
     }));
-    const name = svgEl('text', {x: r.x + 14, y: r.y + 24, class: 'room-name'});
+    // Room labels sit top-right: the six desks and their badges occupy the left half
+    // of the bullpen, so a left-aligned label would be crossed by a state badge.
+    const name = svgEl('text', {
+      x: r.x + r.w - 14, y: r.y + 24, class: 'room-name', 'text-anchor': 'end'
+    });
     name.textContent = room.name;
     rooms.appendChild(name);
-    const kind = svgEl('text', {x: r.x + 14, y: r.y + 40, class: 'room-kind'});
+    const kind = svgEl('text', {
+      x: r.x + r.w - 14, y: r.y + 40, class: 'room-kind', 'text-anchor': 'end'
+    });
     kind.textContent = room.kind + ' · cap ' + room.capacity;
     rooms.appendChild(kind);
     const a = room.anchor;
     rooms.appendChild(svgEl('circle', {cx: a.x, cy: a.y, r: 4, class: 'room-anchor'}));
   });
+
+  // Live meeting line inside the meeting room (state-driven, empty when no meeting).
+  const meetingRoom = ROOMS.get('meeting_room');
+  if (meetingRoom) {
+    rooms.appendChild(svgEl('text', {
+      id: 'meeting-live', x: meetingRoom.rect.x + 14,
+      y: meetingRoom.rect.y + meetingRoom.rect.h - 16, class: 'room-live'
+    }));
+  }
 
   CONTRACT.stations.forEach((station) => {
     const g = svgEl('g', {class: 'desk-group', 'data-agent': station.agent, 'data-desk': station.id});
@@ -525,7 +541,7 @@ function nextMilestone(now) {
    7. Render — one path, always from the model
    ====================================================================== */
 function render() {
-  const simNow = simDate(world.tick);
+  const simNow = simDate(world.tick) || (world.simTime ? new Date(world.simTime) : null);
   $('#clock').textContent = hhmmss(simNow);
   $('#clock').dateTime = simNow ? simNow.toISOString() : '';
   $('#tick').textContent = world.tick === null ? '—' : world.tick;
@@ -562,6 +578,21 @@ function render() {
     const elapsed = a ? formatElapsed(a.elapsed) : null;
     refs.elapsed.textContent = elapsed === null ? '—' : elapsed;
   });
+
+  const meetingLive = document.getElementById('meeting-live');
+  if (meetingLive) {
+    // Prefer the wire's meeting object; fall back to counting agents the snapshot itself
+    // places in the meeting room (still the wire, never a local guess).
+    const members = world.meeting && Array.isArray(world.meeting.members) ? world.meeting.members : [];
+    const inRoom = AGENTS.filter((agent) => {
+      const a = world.agents.get(agent.id);
+      return a && a.room === 'meeting_room' && a.state === 'meeting';
+    }).length;
+    const count = members.length || inRoom;
+    meetingLive.textContent = count
+      ? 'in session · ' + count + (count === 1 ? ' agent' : ' agents')
+      : '';
+  }
 
   renderDetail(simNow);
   renderPlan(simNow);

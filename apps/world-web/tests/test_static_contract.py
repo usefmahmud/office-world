@@ -9,7 +9,6 @@ output, and the DOM hooks that `docs/AC.md` asserts (W3-01 … W3-06) must exist
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
