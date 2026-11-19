@@ -3,98 +3,746 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Agents Office World — engine check</title>
+<title>Agents Office World — floor &amp; mission control</title>
+<!--
+  W3 render (WORLD-5). One static page, no build step, no framework, no local server required.
+
+  Data sources (both frozen v1.0.0, see docs/CONTRACT.md):
+    * geometry, names, rooms, desks, schedule  -> the block below, generated from world/dayplan.yaml
+                                                  by apps/world-web/contract_projection.py (drift-tested)
+    * live state                              -> GET /api/world/state  (§9.1 snapshot)
+                                                  WS  /ws/world        (§9.2 snapshot + patches)
+
+  Rules honoured here:
+    * the page invents nothing: a badge is the wire `state` or it is blank; a ticket is the wire
+      `task_id` or it is "—". No local state machine, no defaults pretending to be data.
+    * unknown rooms / unknown WS frame types are normalised or ignored and counted, never guessed
+      (forward compatibility, AC-W2-06).
+    * served from file:// it still draws the floor plan and says plainly that there is no link.
+      Optional overrides: index.html?api=http://host:8000&ws=ws://host:8000
+-->
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
-         background:#0c1014; color:#c9d6e2; padding:24px; }
-  h1 { font-size:16px; letter-spacing:.14em; text-transform:uppercase; color:#7fd1ff; margin:0 0 4px; }
-  .sub { color:#64798c; margin-bottom:20px; }
-  .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); max-width:1000px; }
-  .desk { border:1px solid #1d2a36; border-radius:10px; padding:10px 12px; background:#101821; }
-  .desk .name { font-weight:600; color:#e7f1fa; }
-  .desk .role { color:#5d7387; font-size:12px; }
-  .state { display:inline-block; margin-top:8px; padding:2px 8px; border-radius:999px;
-           font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
-  .idle { background:#1b232c; color:#8aa0b3; }
-  .working { background:#0f3323; color:#5ee39b; }
-  .review { background:#33290f; color:#e9c46a; }
-  .break { background:#2b1f33; color:#c79bf0; }
-  .meeting { background:#0f2a3a; color:#67c9f5; }
-  .meta { margin-top:6px; font-size:11px; color:#4f6478; }
-  .bar { max-width:1000px; display:flex; gap:16px; align-items:center;
-         margin-bottom:14px; color:#5d7387; font-size:12px; }
-  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; background:#c0392b; margin-right:6px; }
-  .dot.on { background:#2ecc71; box-shadow:0 0 8px #2ecc71; }
+  :root{
+    color-scheme: dark;
+    --bg:#0b0f14; --panel:#0e151d; --panel-2:#111a23; --line:#1c2937; --line-soft:#16212c;
+    --ink:#c9d6e2; --ink-dim:#7b90a4; --ink-faint:#51677b; --accent:#7fd1ff;
+    --idle:#8aa0b3; --working:#5ee39b; --review:#e9c46a; --break:#c79bf0; --meeting:#67c9f5;
+    --bad:#ff7b72;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    display:flex; flex-direction:column; min-height:100%;
+  }
+  header{
+    display:flex; align-items:baseline; gap:22px; flex-wrap:wrap;
+    padding:14px 20px 12px; border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  header h1{
+    font-size:13px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent);
+    margin:0; font-weight:600;
+  }
+  .clock{display:flex; align-items:baseline; gap:8px}
+  .clock time{font-size:26px; letter-spacing:.06em; color:#eaf4ff; font-variant-numeric:tabular-nums}
+  .clock .lbl{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint)}
+  .meta{display:flex; gap:18px; color:var(--ink-dim); font-size:11px; flex-wrap:wrap}
+  .meta b{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+  .link{display:flex; align-items:center; gap:8px; font-size:11px; color:var(--ink-dim);
+        padding:2px 10px; border:1px solid var(--line); border-radius:999px}
+  .link .dot{width:8px; height:8px; border-radius:50%; background:#8a3b36; box-shadow:0 0 0 2px #2a1512}
+  .link[data-state="live"]{color:var(--working); border-color:#1d4a34}
+  .link[data-state="live"] .dot{background:var(--working); box-shadow:0 0 9px var(--working)}
+  .link[data-state="connecting"] .dot{background:var(--review); animation:pulse 1.2s infinite}
+  .link[data-state="static"]{color:var(--ink-faint)}
+  @keyframes pulse{50%{opacity:.25}}
+
+  main{flex:1; display:grid; grid-template-columns:minmax(0,1fr) 430px; gap:0; min-height:0}
+  @media (max-width:1080px){ main{grid-template-columns:1fr} }
+
+  #stage{position:relative; padding:16px 18px; min-width:0}
+  #stage svg{width:100%; height:auto; display:block; border:1px solid var(--line);
+             border-radius:12px; background:radial-gradient(120% 120% at 20% 0%,#0f1822 0%,#0a0e13 70%)}
+
+  /* ---- floor plan ---- */
+  .room-rect{fill:#0f1822; stroke:#22323f; stroke-width:1.5}
+  .room-rect.kind-meeting{fill:#101d29}
+  .room-rect.kind-review{fill:#191c1a}
+  .room-rect.kind-break{fill:#1a1524}
+  .room-rect.kind-focus{fill:#101f1a}
+  .room-name{fill:#93a9bd; font-size:13px; letter-spacing:.14em; text-transform:uppercase}
+  .room-kind{fill:var(--ink-faint); font-size:10px; letter-spacing:.1em; text-transform:uppercase}
+  .room-anchor{fill:none; stroke:#2a3b4b; stroke-width:1; stroke-dasharray:3 4}
+  .desk{fill:#14212c; stroke:#243646; stroke-width:1}
+  .desk[data-empty="1"]{fill:#101820; stroke:#1b2833; opacity:.55}
+  .desk-id{fill:var(--ink-faint); font-size:9.5px; letter-spacing:.12em}
+  .desk-name{fill:#dbe9f6; font-size:12.5px; font-weight:600}
+  .desk-role{fill:var(--ink-faint); font-size:10px}
+  .agent{cursor:pointer; outline:none}
+  .agent:focus-visible .agent-dot{stroke:var(--accent); stroke-width:3}
+  .agent-dot{stroke:#0a0e13; stroke-width:2}
+  .agent.is-selected .agent-dot{stroke:#eaf4ff; stroke-width:2.5}
+  .agent-name{fill:#c3d5e6; font-size:11px; letter-spacing:.06em; pointer-events:none}
+  .badge-bg{fill:#121b24; stroke:#26384a; stroke-width:1}
+  .badge-text{font-size:10px; letter-spacing:.1em; text-transform:uppercase; pointer-events:none}
+  .s-idle  .agent-dot{fill:var(--idle)}   .s-idle  .badge-bg{stroke:#33465a} .s-idle  .badge-text{fill:var(--idle)}
+  .s-working .agent-dot{fill:var(--working)} .s-working .badge-bg{stroke:#1d5c40} .s-working .badge-text{fill:var(--working)}
+  .s-review .agent-dot{fill:var(--review)} .s-review .badge-bg{stroke:#5c4a1d} .s-review .badge-text{fill:var(--review)}
+  .s-break  .agent-dot{fill:var(--break)}  .s-break  .badge-bg{stroke:#452f5c} .s-break  .badge-text{fill:var(--break)}
+  .s-meeting .agent-dot{fill:var(--meeting)} .s-meeting .badge-bg{stroke:#1d4a5c} .s-meeting .badge-text{fill:var(--meeting)}
+  .s-unknown .agent-dot{fill:#3a2b2b} .s-unknown .badge-bg{stroke:#5c2b2b} .s-unknown .badge-text{fill:var(--bad)}
+  .agent.is-selected .badge-bg{stroke:#eaf4ff}
+
+  /* ---- mission control ---- */
+  aside{border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0}
+  @media (max-width:1080px){ aside{border-left:0; border-top:1px solid var(--line)} }
+  aside h2{font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent);
+           margin:0; padding:14px 16px 10px; border-bottom:1px solid var(--line)}
+  .mc-scroll{overflow:auto; flex:1; min-height:0}
+  table{width:100%; border-collapse:collapse; font-size:11.5px}
+  thead th{position:sticky; top:0; background:var(--panel-2); color:var(--ink-faint); font-weight:500;
+           text-align:left; padding:7px 10px; letter-spacing:.1em; text-transform:uppercase; font-size:9.5px;
+           border-bottom:1px solid var(--line)}
+  tbody tr{border-bottom:1px solid var(--line-soft); cursor:pointer}
+  tbody tr:hover{background:#121b25}
+  tbody tr.is-selected{background:#152230}
+  td{padding:8px 10px; vertical-align:middle}
+  .mc-agent .nm{color:#e3eefa; font-weight:600; display:block}
+  .mc-agent .sub{color:var(--ink-faint); font-size:10px}
+  .mc-ticket{font-variant-numeric:tabular-nums; color:var(--ink)}
+  .mc-ticket[data-empty="1"]{color:var(--ink-faint)}
+  .mc-room{color:var(--ink-dim); font-size:10.5px}
+  .mc-elapsed{font-variant-numeric:tabular-nums; color:var(--ink-dim); white-space:nowrap}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; font-size:10px; letter-spacing:.09em;
+        text-transform:uppercase; border:1px solid; white-space:nowrap}
+  .pill.s-idle{color:var(--idle); border-color:#33465a; background:#141c24}
+  .pill.s-working{color:var(--working); border-color:#1d5c40; background:#0d2218}
+  .pill.s-review{color:var(--review); border-color:#5c4a1d; background:#221c0d}
+  .pill.s-break{color:var(--break); border-color:#452f5c; background:#1b1424}
+  .pill.s-meeting{color:var(--meeting); border-color:#1d4a5c; background:#0d1d24}
+  .pill.s-unknown{color:var(--bad); border-color:#5c2b2b; background:#22100f}
+
+  #detail{border-top:1px solid var(--line); padding:12px 16px 14px; background:var(--panel-2)}
+  #detail h3{margin:0 0 8px; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-dim)}
+  #detail h3 span{color:#eaf4ff}
+  .kv{display:grid; grid-template-columns:88px 1fr; gap:4px 10px; font-size:11.5px}
+  .kv dt{color:var(--ink-faint); letter-spacing:.08em; text-transform:uppercase; font-size:9.5px; padding-top:2px}
+  .kv dd{margin:0; color:#dbe9f6; font-variant-numeric:tabular-nums}
+  .kv dd.empty{color:var(--ink-faint); font-style:italic; font-variant-numeric:normal}
+  .hint{color:var(--ink-faint); font-size:10.5px; margin:8px 0 0}
+
+  .plan{border-top:1px solid var(--line); padding:12px 16px 16px}
+  .plan h3{margin:0 0 8px; font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint)}
+  .plan ol{list-style:none; margin:0; padding:0; font-size:11px}
+  .plan li{display:flex; gap:8px; padding:3px 0; color:var(--ink-dim)}
+  .plan li .at{color:var(--ink); font-variant-numeric:tabular-nums; width:42px; flex:none}
+  .plan li.is-past{opacity:.42}
+  .plan li.is-next{color:var(--accent)}
+  .plan li .id{color:var(--ink-faint); width:22px; flex:none}
+
+  footer{border-top:1px solid var(--line); background:var(--panel); color:var(--ink-faint);
+         font-size:10.5px; padding:8px 20px; display:flex; gap:16px; flex-wrap:wrap}
+  footer .warn{color:var(--bad)}
+  footer .ok{color:var(--working)}
 </style>
 </head>
 <body>
+
+<header>
   <h1>Agents Office World</h1>
-  <div class="sub">PROVISIONAL ENGINE CHECK — the real SVG floor is W3 (Omar/Maryam).</div>
-  <div class="bar">
-    <span><span id="dot" class="dot"></span><span id="link">connecting…</span></span>
-    <span>tick <b id="tick">–</b></span>
-    <span>seed <b id="seed">–</b></span>
-    <span id="meeting"></span>
+  <div class="clock">
+    <time id="clock">--:--:--</time>
+    <span class="lbl">sim clock</span>
   </div>
-  <div id="grid" class="grid"></div>
+  <div class="meta">
+    <span>tick <b id="tick">—</b></span>
+    <span>seed <b id="seed">—</b></span>
+    <span>agents <b id="agent-count">6</b></span>
+  </div>
+  <div class="link" id="link" data-state="connecting"><span class="dot"></span><span id="link-text">connecting</span></div>
+</header>
 
+<main>
+  <section id="stage" aria-label="Floor plan">
+    <svg id="floor" viewBox="0 0 1200 700" role="img"
+         aria-label="Office floor plan: five rooms, six desks and six agents">
+      <g id="layer-rooms"></g>
+      <g id="layer-desks"></g>
+      <g id="layer-agents"></g>
+    </svg>
+  </section>
+
+  <aside aria-label="Mission control">
+    <h2>Mission Control</h2>
+    <div class="mc-scroll">
+      <table id="mc">
+        <thead>
+          <tr><th>Agent</th><th>Room</th><th>Ticket</th><th>State</th><th>In state</th></tr>
+        </thead>
+        <tbody id="mc-body"></tbody>
+      </table>
+      <div id="detail">
+        <h3>Agent panel — <span id="detail-who">no agent selected</span></h3>
+        <dl class="kv">
+          <dt>Ticket</dt><dd id="detail-ticket" class="empty">—</dd>
+          <dt>State</dt><dd id="detail-state" class="empty">—</dd>
+          <dt>Room</dt><dd id="detail-room" class="empty">—</dd>
+          <dt>In state</dt><dd id="detail-elapsed" class="empty">—</dd>
+          <dt>Since tick</dt><dd id="detail-since" class="empty">—</dd>
+          <dt>Next up</dt><dd id="detail-next" class="empty">no data</dd>
+        </dl>
+        <p class="hint" id="detail-hint">Click a dot or a row to inspect an agent.</p>
+      </div>
+    </div>
+    <div class="plan">
+      <h3>Day plan (contract schedule)</h3>
+      <ol id="plan"></ol>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span id="foot-contract">contract —</span>
+  <span id="foot-source">state: —</span>
+  <span id="foot-warnings" class="ok">contract warnings: 0</span>
+</footer>
+
+<script id="world-contract" type="application/json">{"contract_version":"1.0.0","source":"world/dayplan.yaml","ticket":"WORLD-1","sim":{"tick_seconds":1,"t0":"2026-01-05T09:00:00Z","day_start":"09:00","day_end":"18:00","day_length_ticks":32400,"seed":42},"canvas":{"w":1200,"h":700},"states":["idle","working","review","break","meeting"],"initial_state":"idle","canonical_cycle":["idle","working","review","break","meeting","idle"],"event_types":["task_start","task_done","message","meeting_open","meeting_close","break","handoff","idle"],"agents":[{"id":"hakim","name":"Hakim","role":"orchestration","desk":"D1","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"layla","name":"Layla","role":"lifecycle","desk":"D2","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"maryam","name":"Maryam","role":"delivery","desk":"D3","home_room":"bullpen","secondary_room":"review_corner"},{"id":"omar","name":"Omar","role":"development","desk":"D4","home_room":"bullpen","secondary_room":"review_corner"},{"id":"salim","name":"Salim","role":"research","desk":"D5","home_room":"bullpen","secondary_room":"reading_room"},{"id":"yassin","name":"Yassin","role":"infrastructure","desk":"D6","home_room":"bullpen","secondary_room":"review_corner"}],"rooms":[{"id":"bullpen","name":"Bullpen","kind":"open_floor","capacity":6,"rect":{"x":40,"y":40,"w":720,"h":400},"anchor":{"x":740,"y":240}},{"id":"meeting_room","name":"Meeting Room","kind":"meeting","capacity":6,"rect":{"x":800,"y":40,"w":360,"h":240},"anchor":{"x":830,"y":160}},{"id":"review_corner","name":"Review Corner","kind":"review","capacity":2,"rect":{"x":800,"y":320,"w":360,"h":120},"anchor":{"x":830,"y":380}},{"id":"kitchen","name":"Kitchen","kind":"break","capacity":4,"rect":{"x":40,"y":470,"w":480,"h":180},"anchor":{"x":500,"y":560}},{"id":"reading_room","name":"Reading Room","kind":"focus","capacity":2,"rect":{"x":560,"y":470,"w":600,"h":180},"anchor":{"x":600,"y":560}}],"stations":[{"id":"D1","agent":"hakim","room":"bullpen","x":120,"y":140},{"id":"D2","agent":"layla","room":"bullpen","x":320,"y":140},{"id":"D3","agent":"maryam","room":"bullpen","x":520,"y":140},{"id":"D4","agent":"omar","room":"bullpen","x":120,"y":300},{"id":"D5","agent":"salim","room":"bullpen","x":320,"y":300},{"id":"D6","agent":"yassin","room":"bullpen","x":520,"y":300}],"schedule":[{"id":"S1","at":"09:00","type":"day_open","room":"bullpen","rule":"every_agent","emit":"task_start"},{"id":"S2","at":"10:00","type":"meeting","topic":"standup","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":900,"emit":["meeting_open","meeting_close"]},{"id":"S3","at":"13:00","type":"break","kind":"lunch","room":"kitchen","participants":"all","planned_ticks":2700},{"id":"S4","at":"13:45","type":"resume","rule":"every_agent","emit":"task_start"},{"id":"S5","at":"15:30","type":"break","kind":"coffee","room":"kitchen","participants":["layla","salim","yassin"],"planned_ticks":900},{"id":"S6","at":"16:30","type":"review_sweep","room":"review_corner","participants":["maryam"],"emit":"task_done"},{"id":"S7","at":"17:00","type":"meeting","topic":"daily_review","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":1800,"emit":["meeting_open","meeting_close"]},{"id":"S8","at":"18:00","type":"day_close","rule":"every_agent","emit":"idle"}]}</script>
 <script>
-const grid  = document.getElementById('grid');
-const tickEl = document.getElementById('tick');
-const seedEl = document.getElementById('seed');
-const linkEl = document.getElementById('link');
-const dotEl  = document.getElementById('dot');
-const meetEl = document.getElementById('meeting');
-const cards  = new Map();
+'use strict';
 
-function card(a) {
-  let el = cards.get(a.id);
-  if (!el) {
-    el = document.createElement('div');
-    el.className = 'desk';
-    el.innerHTML = `<div class="name"></div><div class="role"></div>
-                    <div class="state"></div><div class="meta"></div>`;
-    grid.appendChild(el);
-    cards.set(a.id, el);
-  }
-  el.querySelector('.name').textContent = a.name;
-  el.querySelector('.role').textContent = a.role;
-  const st = el.querySelector('.state');
-  st.textContent = a.state;
-  st.className = 'state ' + a.state;
-  el.querySelector('.meta').textContent =
-    a.room + (a.ticket ? ' · ' + a.ticket : '') + ' · ' + a.since_tick;
+/* ======================================================================
+   1. Contract (inline, generated from world/dayplan.yaml — drift-tested)
+   ====================================================================== */
+const CONTRACT = JSON.parse(document.getElementById('world-contract').textContent);
+const STATES = CONTRACT.states;
+const STATE_SET = new Set(STATES);
+const AGENTS = CONTRACT.agents;                       // declaration order == tie-break order
+const AGENT_BY_ID = new Map(AGENTS.map(a => [a.id, a]));
+const ROOMS = new Map(CONTRACT.rooms.map(r => [r.id, r]));
+const STATION_BY_AGENT = new Map(CONTRACT.stations.map(s => [s.agent, s]));
+const CANVAS = CONTRACT.canvas;
+
+/* The engine (W2) names rooms its own way; map aliases onto contract ids instead of
+   hard-coding a second vocabulary. Unknown rooms stay unknown and are counted. */
+const ROOM_ALIASES = {
+  'desk': 'bullpen',              // desk-<agent> -> the bullpen, where all six desks live
+  'meeting-room': 'meeting_room',
+  'review-corner': 'review_corner',
+  'coffee-corner': 'kitchen',
+  'reading-room': 'reading_room',
+  'open-floor': 'bullpen'
+};
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const $ = (sel) => document.querySelector(sel);
+
+/* ======================================================================
+   2. World model — filled only from the wire
+   ====================================================================== */
+const world = {
+  tick: null,
+  seed: null,
+  simTime: null,
+  lastEventSeq: null,
+  agents: new Map(),        // id -> {id, state, room, roomRaw, taskId, elapsed, sinceTick, x, y}
+  meeting: null,
+  warnings: 0,
+  seenWarnings: new Set(),
+  selected: null,
+  link: 'connecting'
+};
+
+function warn(message) {
+  if (world.seenWarnings.has(message)) return;
+  world.seenWarnings.add(message);
+  world.warnings += 1;
+  console.warn('[world]', message);
+  paintWarnings();
 }
 
-function apply(snap) {
-  tickEl.textContent = snap.tick;
-  seedEl.textContent = snap.seed;
-  snap.agents.forEach(card);
-  meetEl.textContent = snap.meeting ? ('meeting: ' + snap.meeting.members.join(', ')) : '';
+function paintWarnings() {
+  const el = $('#foot-warnings');
+  if (!el) return;
+  el.textContent = 'contract warnings: ' + world.warnings;
+  el.className = world.warnings ? 'warn' : 'ok';
+}
+
+function normalizeRoom(raw) {
+  if (typeof raw !== 'string' || raw === '') return null;
+  if (ROOMS.has(raw)) return raw;
+  if (raw.startsWith('desk-') || raw.startsWith('desk_')) return 'bullpen';
+  const dashed = raw.replace(/_/g, '-');
+  const mapped = ROOM_ALIASES[dashed] || ROOM_ALIASES[raw] || dashed.replace(/-/g, '_');
+  return ROOMS.has(mapped) ? mapped : null;
+}
+
+function agentFromWire(raw, tick, prev) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id != null ? raw.id : '');
+  if (!AGENT_BY_ID.has(id)) { warn('unknown agent id "' + id + '" (W-EVT-04 class) — ignored'); return null; }
+  const out = Object.assign({id: id, state: null, room: null, roomRaw: null,
+                             taskId: null, elapsed: null, sinceTick: null, x: null, y: null}, prev || {});
+  out.id = id;
+
+  if ('state' in raw) {
+    if (STATE_SET.has(raw.state)) out.state = raw.state;
+    else { out.state = null; warn('agent ' + id + ': state "' + raw.state + '" is not one of the five contract states'); }
+  }
+  if ('room' in raw) {
+    out.roomRaw = raw.room;
+    out.room = normalizeRoom(raw.room);
+    if (out.room === null) warn('agent ' + id + ': room "' + raw.room + '" is not in the contract');
+  }
+  if ('task_id' in raw) out.taskId = typeof raw.task_id === 'string' ? raw.task_id : null;
+  else if ('ticket' in raw) out.taskId = typeof raw.ticket === 'string' ? raw.ticket : null;
+  if (Number.isInteger(raw.elapsed_ticks)) out.elapsed = raw.elapsed_ticks;
+  else if (Number.isInteger(raw.since_tick)) {
+    out.sinceTick = raw.since_tick;
+    out.elapsed = Number.isInteger(tick) ? Math.max(0, tick - raw.since_tick) : null;
+  }
+  if (Number.isInteger(raw.x) && Number.isInteger(raw.y)) { out.x = raw.x; out.y = raw.y; }
+  return out;
+}
+
+function applySnapshot(snap) {
+  if (!snap || typeof snap !== 'object') { warn('snapshot payload is not an object'); return; }
+  if (Number.isInteger(snap.tick)) world.tick = snap.tick;
+  if (Number.isInteger(snap.seed)) world.seed = snap.seed;
+  if (typeof snap.sim_time === 'string') world.simTime = snap.sim_time;
+  if (Number.isInteger(snap.last_event_seq)) world.lastEventSeq = snap.last_event_seq;
+  if ('meeting' in snap) world.meeting = snap.meeting || null;
+  if (Array.isArray(snap.agents)) applyAgents(snap.agents, world.tick);
+  render();
+}
+
+function applyAgents(list, tick) {
+  list.forEach((raw) => {
+    const prev = world.agents.get(String(raw && raw.id)) || null;
+    const next = agentFromWire(raw, Number.isInteger(tick) ? tick : world.tick, prev);
+    if (next) world.agents.set(next.id, next);
+  });
+}
+
+/* ======================================================================
+   3. Geometry — positions come from the contract; live x/y wins when sent
+   ====================================================================== */
+function seatInRoom(room, agentId) {
+  const occupants = AGENTS
+    .map(a => a.id)
+    .filter(id => (world.agents.get(id) || {}).room === room.id);
+  const n = Math.max(occupants.length, 1);
+  const i = Math.max(occupants.indexOf(agentId), 0);
+  const inset = 70;
+  const usable = Math.max(room.rect.w - inset * 2, 40);
+  const step = n > 1 ? Math.min(104, usable / (n - 1)) : 0;
+  const x = room.rect.x + room.rect.w / 2 + (i - (n - 1) / 2) * step;
+  const y = room.rect.y + room.rect.h * 0.6;
+  return {x: Math.round(x), y: Math.round(y)};
+}
+
+function positionFor(agent) {
+  if (agent.x !== null && agent.y !== null) return {x: agent.x, y: agent.y, derived: false};
+  const station = STATION_BY_AGENT.get(agent.id);
+  const home = station ? station.room : 'bullpen';
+  const roomId = agent.room || home;
+  // The contract seat point is inside the desk block; the dot rides just above it.
+  if (roomId === home) return {x: station.x, y: station.y - 44, derived: true};
+  const room = ROOMS.get(roomId);
+  if (!room) return {x: station.x, y: station.y - 44, derived: true};
+  return Object.assign(seatInRoom(room, agent.id), {derived: true});
+}
+
+/* ======================================================================
+   4. Floor plan (built once from the contract, patched every frame)
+   ====================================================================== */
+const svgEl = (tag, attrs) => {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+};
+
+const badgeW = 72;
+const dotGroups = new Map();
+const deskGroups = new Map();
+
+function buildFloor() {
+  const rooms = $('#layer-rooms');
+  const desks = $('#layer-desks');
+  const agents = $('#layer-agents');
+
+  CONTRACT.rooms.forEach((room) => {
+    const r = room.rect;
+    rooms.appendChild(svgEl('rect', {
+      x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'room-rect kind-' + room.kind
+    }));
+    const name = svgEl('text', {x: r.x + 14, y: r.y + 24, class: 'room-name'});
+    name.textContent = room.name;
+    rooms.appendChild(name);
+    const kind = svgEl('text', {x: r.x + 14, y: r.y + 40, class: 'room-kind'});
+    kind.textContent = room.kind + ' · cap ' + room.capacity;
+    rooms.appendChild(kind);
+    const a = room.anchor;
+    rooms.appendChild(svgEl('circle', {cx: a.x, cy: a.y, r: 4, class: 'room-anchor'}));
+  });
+
+  CONTRACT.stations.forEach((station) => {
+    const g = svgEl('g', {class: 'desk-group', 'data-agent': station.agent, 'data-desk': station.id});
+    g.appendChild(svgEl('rect', {
+      x: station.x - 58, y: station.y - 22, width: 116, height: 62, rx: 8,
+      class: 'desk', 'data-empty': '0'
+    }));
+    const agent = AGENT_BY_ID.get(station.agent);
+    const name = svgEl('text', {x: station.x, y: station.y + 8, class: 'desk-name', 'text-anchor': 'middle'});
+    name.textContent = agent.name;
+    g.appendChild(name);
+    const role = svgEl('text', {x: station.x, y: station.y + 24, class: 'desk-role', 'text-anchor': 'middle'});
+    role.textContent = agent.role;
+    g.appendChild(role);
+    const idLabel = svgEl('text', {x: station.x + 50, y: station.y + 36, class: 'desk-id', 'text-anchor': 'end'});
+    idLabel.textContent = station.id;
+    g.appendChild(idLabel);
+    desks.appendChild(g);
+    deskGroups.set(station.agent, g);
+  });
+
+  AGENTS.forEach((agent) => {
+    const g = svgEl('g', {
+      class: 'agent s-idle', 'data-agent': agent.id, tabindex: '0', role: 'button',
+      'aria-label': agent.name + ' — state unknown'
+    });
+    g.appendChild(svgEl('circle', {class: 'agent-dot', r: 11, cx: 0, cy: 0}));
+    const label = svgEl('text', {class: 'agent-name', x: 17, y: 4});
+    label.textContent = agent.name;
+    g.appendChild(label);
+    const badge = svgEl('g', {class: 'badge', transform: 'translate(0,-29)'});
+    badge.appendChild(svgEl('rect', {
+      class: 'badge-bg', x: -badgeW / 2, y: -10, width: badgeW, height: 20, rx: 10
+    }));
+    const text = svgEl('text', {class: 'badge-text', y: 4, 'text-anchor': 'middle'});
+    text.textContent = '—';
+    badge.appendChild(text);
+    g.appendChild(badge);
+    g.addEventListener('click', () => select(agent.id));
+    g.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(agent.id); }
+    });
+    agents.appendChild(g);
+    dotGroups.set(agent.id, {group: g, badgeText: text, label: label});
+  });
+}
+
+/* ======================================================================
+   5. Mission control + detail panel (same snapshot, no second source)
+   ====================================================================== */
+const rowRefs = new Map();
+
+function buildMissionControl() {
+  const body = $('#mc-body');
+  AGENTS.forEach((agent) => {
+    const tr = document.createElement('tr');
+    tr.dataset.agent = agent.id;
+    tr.innerHTML =
+      '<td class="mc-agent"><span class="nm"></span><span class="sub"></span></td>' +
+      '<td class="mc-room"></td>' +
+      '<td class="mc-ticket" data-empty="1">—</td>' +
+      '<td class="mc-state"><span class="pill s-idle">—</span></td>' +
+      '<td class="mc-elapsed">—</td>';
+    tr.querySelector('.nm').textContent = agent.name;
+    tr.querySelector('.sub').textContent = agent.id + ' · ' + agent.desk;
+    tr.addEventListener('click', () => select(agent.id));
+    body.appendChild(tr);
+    rowRefs.set(agent.id, {
+      row: tr,
+      room: tr.querySelector('.mc-room'),
+      ticket: tr.querySelector('.mc-ticket'),
+      state: tr.querySelector('.mc-state .pill'),
+      elapsed: tr.querySelector('.mc-elapsed')
+    });
+  });
+  buildPlan();
+}
+
+function buildPlan() {
+  const ol = $('#plan');
+  CONTRACT.schedule.forEach((entry) => {
+    const li = document.createElement('li');
+    li.dataset.entry = entry.id;
+    li.innerHTML = '<span class="id"></span><span class="at"></span><span class="what"></span>';
+    li.querySelector('.id').textContent = entry.id;
+    li.querySelector('.at').textContent = entry.at;
+    const what = entry.topic || entry.kind || entry.type;
+    li.querySelector('.what').textContent = String(what).replace(/_/g, ' ');
+    ol.appendChild(li);
+  });
+}
+
+/* ======================================================================
+   6. Time — sim clock is derived (DT-2): ts = t0 + tick * tick_seconds
+   ====================================================================== */
+const T0_MS = Date.parse(CONTRACT.sim.t0);
+const TICK_MS = CONTRACT.sim.tick_seconds * 1000;
+
+function simDate(tick) {
+  if (!Number.isInteger(tick)) return null;
+  return new Date(T0_MS + tick * TICK_MS);
+}
+
+function hhmmss(date) {
+  if (!date) return '--:--:--';
+  const p = (n) => String(n).padStart(2, '0');
+  return p(date.getUTCHours()) + ':' + p(date.getUTCMinutes()) + ':' + p(date.getUTCSeconds());
+}
+
+function minutesOfDay(date) {
+  return date.getUTCHours() * 60 + date.getUTCMinutes() + date.getUTCSeconds() / 60;
+}
+
+function clockMinutes(at) {
+  const [h, m] = String(at).split(':').map(Number);
+  return h * 60 + m;
+}
+
+function formatElapsed(ticks) {
+  if (!Number.isInteger(ticks)) return null;
+  const total = Math.max(0, ticks) * CONTRACT.sim.tick_seconds;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's' : s + 's';
+}
+
+function nextMilestone(now) {
+  if (!now) return null;
+  const mins = minutesOfDay(now);
+  for (const entry of CONTRACT.schedule) {
+    if (clockMinutes(entry.at) > mins) return entry;
+  }
+  return null;
+}
+
+/* ======================================================================
+   7. Render — one path, always from the model
+   ====================================================================== */
+function render() {
+  const simNow = simDate(world.tick);
+  $('#clock').textContent = hhmmss(simNow);
+  $('#clock').dateTime = simNow ? simNow.toISOString() : '';
+  $('#tick').textContent = world.tick === null ? '—' : world.tick;
+  $('#seed').textContent = world.seed === null ? CONTRACT.sim.seed : world.seed;
+
+  AGENTS.forEach((agent) => {
+    const a = world.agents.get(agent.id);
+    const pos = a ? positionFor(a) : (STATION_BY_AGENT.get(agent.id) || {x: 0, y: 0, derived: true});
+    const stateClass = a && a.state ? 's-' + a.state : 's-unknown';
+    const refs = dotGroups.get(agent.id);
+    if (refs) {
+      refs.group.setAttribute('transform', 'translate(' + pos.x + ',' + pos.y + ')');
+      refs.group.setAttribute('class', 'agent ' + stateClass + (world.selected === agent.id ? ' is-selected' : ''));
+      refs.badgeText.textContent = a && a.state ? a.state : '—';
+      refs.group.setAttribute('aria-label',
+        agent.name + ' — ' + (a && a.state ? a.state : 'no state') +
+        (a && a.room ? ' in ' + (ROOMS.get(a.room) ? ROOMS.get(a.room).name : a.room) : ''));
+    }
+    const desk = deskGroups.get(agent.id);
+    if (desk) desk.querySelector('.desk').setAttribute('data-empty', a && a.room && a.room !== agent.home_room ? '1' : '0');
+  });
+
+  AGENTS.forEach((agent) => {
+    const a = world.agents.get(agent.id);
+    const refs = rowRefs.get(agent.id);
+    if (!refs) return;
+    refs.row.classList.toggle('is-selected', world.selected === agent.id);
+    const room = a && a.room ? (ROOMS.get(a.room) || {name: a.room}) : null;
+    refs.room.textContent = room ? room.name : '—';
+    refs.ticket.textContent = a && a.taskId ? a.taskId : '—';
+    refs.ticket.dataset.empty = a && a.taskId ? '0' : '1';
+    refs.state.textContent = a && a.state ? a.state : '—';
+    refs.state.className = 'pill ' + (a && a.state ? 's-' + a.state : 's-unknown');
+    const elapsed = a ? formatElapsed(a.elapsed) : null;
+    refs.elapsed.textContent = elapsed === null ? '—' : elapsed;
+  });
+
+  renderDetail(simNow);
+  renderPlan(simNow);
+}
+
+function renderDetail(simNow) {
+  const id = world.selected;
+  const set = (sel, value, emptyText) => {
+    const el = $(sel);
+    el.textContent = value === null || value === undefined || value === '' ? emptyText : String(value);
+    el.classList.toggle('empty', value === null || value === undefined || value === '');
+  };
+
+  if (!id) {
+    $('#detail-who').textContent = 'no agent selected';
+    set('#detail-ticket', null, '—');
+    set('#detail-state', null, '—');
+    set('#detail-room', null, '—');
+    set('#detail-elapsed', null, '—');
+    set('#detail-since', null, '—');
+    set('#detail-next', null, 'no data');
+    $('#detail-hint').textContent = 'Click a dot or a row to inspect an agent.';
+    return;
+  }
+
+  const agent = AGENT_BY_ID.get(id);
+  const a = world.agents.get(id);
+  $('#detail-who').textContent = agent.name + ' · ' + agent.id + ' · ' + agent.desk;
+
+  set('#detail-ticket', a && a.taskId ? a.taskId : null, 'no ticket assigned');
+  set('#detail-state', a && a.state ? a.state : null, 'no state on the wire yet');
+  set('#detail-room', a && a.room ? (ROOMS.get(a.room) || {name: a.room}).name : null, '—');
+
+  const elapsed = a && Number.isInteger(a.elapsed) ? a.elapsed : null;
+  set('#detail-elapsed', elapsed === null ? null : formatElapsed(elapsed) + ' (' + elapsed + ' ticks)', '—');
+  set('#detail-since', a && Number.isInteger(a.sinceTick) ? a.sinceTick : null, '—');
+
+  const next = nextMilestone(simNow);
+  if (!next) {
+    set('#detail-next', null, 'no further entry today — day closes at ' + CONTRACT.sim.day_end);
+  } else {
+    const what = String(next.topic || next.kind || next.type).replace(/_/g, ' ');
+    set('#detail-next', next.at + ' ' + what + ' (' + next.id + ')', 'no further entry today');
+  }
+  $('#detail-hint').textContent = 'Source: ' + (world.link === 'live' ? 'live /ws/world deltas' : 'GET /api/world/state');
+}
+
+function renderPlan(simNow) {
+  const nowMin = simNow ? minutesOfDay(simNow) : null;
+  const next = nextMilestone(simNow);
+  document.querySelectorAll('#plan li').forEach((li) => {
+    const entry = CONTRACT.schedule.find((e) => e.id === li.dataset.entry);
+    if (!entry || nowMin === null) { li.className = ''; return; }
+    const at = clockMinutes(entry.at);
+    li.className = at <= nowMin ? 'is-past' : (next && next.id === entry.id ? 'is-next' : '');
+  });
+}
+
+function select(agentId) {
+  world.selected = world.selected === agentId ? null : agentId;
+  render();
+}
+
+/* ======================================================================
+   8. Transport — REST snapshot first, WS deltas after; never a second truth
+   ====================================================================== */
+const params = new URLSearchParams(location.search);
+const API_BASE = (params.get('api') || '').replace(/\/$/, '');
+const WS_BASE = (params.get('ws') || '').replace(/\/$/, '');
+
+function apiUrl(path) { return API_BASE + path; }
+
+function wsUrl(path) {
+  if (WS_BASE) return WS_BASE + path;
+  if (location.protocol === 'file:') return null;
+  return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + path;
+}
+
+function setLink(state, text) {
+  world.link = state;
+  const el = $('#link');
+  el.dataset.state = state;
+  $('#link-text').textContent = text;
+  $('#foot-source').textContent = state === 'live'
+    ? 'state: live ws deltas'
+    : (state === 'static' ? 'state: no engine — floor plan only' : 'state: snapshot + polling');
+}
+
+let polling = null;
+let ws = null;
+let reconnectDelay = 1000;
+let wsEverOpened = false;
+
+async function loadSnapshot() {
+  try {
+    const res = await fetch(apiUrl('/api/world/state'), {cache: 'no-store', headers: {accept: 'application/json'}});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    applySnapshot(await res.json());
+    if (!wsEverOpened) setLink('polling', 'polling');
+    return true;
+  } catch (err) {
+    if (!wsEverOpened) setLink('static', 'no engine');
+    return false;
+  }
+}
+
+function startPolling() {
+  if (polling) return;
+  polling = setInterval(() => { if (!wsEverOpened) loadSnapshot(); }, 5000);
 }
 
 function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws/world`);
-  ws.onopen = () => { dotEl.classList.add('on'); linkEl.textContent = 'live'; };
-  ws.onclose = () => {
-    dotEl.classList.remove('on'); linkEl.textContent = 'reconnecting…';
-    setTimeout(connect, 2000);
+  const url = wsUrl('/ws/world');
+  if (!url) { setLink('static', 'static file — no ws'); startPolling(); return; }
+
+  try { ws = new WebSocket(url); } catch (err) { setLink('static', 'ws unavailable'); startPolling(); return; }
+  setLink('connecting', 'connecting');
+
+  ws.onopen = () => {
+    wsEverOpened = true;
+    reconnectDelay = 1000;
+    setLink('live', 'live');
+    if (polling) { clearInterval(polling); polling = null; }
   };
+
   ws.onmessage = (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'snapshot') { apply(msg.world); return; }
-    if (msg.type === 'delta') {
-      tickEl.textContent = msg.tick;
-      (msg.patches || []).forEach(card);
-      meetEl.textContent = msg.meeting ? ('meeting: ' + msg.meeting.members.join(', ')) : '';
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch (err) { warn('unparseable ws frame'); return; }
+    if (!msg || typeof msg !== 'object') { warn('ws frame is not an object'); return; }
+
+    switch (msg.type) {
+      case 'snapshot':
+        applySnapshot(msg.world || msg);
+        break;
+      case 'patch':                       // contract §9.2
+        if (Number.isInteger(msg.tick)) world.tick = msg.tick;
+        if (Number.isInteger(msg.last_event_seq)) world.lastEventSeq = msg.last_event_seq;
+        if (Array.isArray(msg.agents)) applyAgents(msg.agents, msg.tick);
+        render();
+        break;
+      case 'delta':                       // engine W2 shape: coalesced agent patches
+        if (Number.isInteger(msg.tick)) world.tick = msg.tick;
+        if ('meeting' in msg) world.meeting = msg.meeting || null;
+        if (Array.isArray(msg.patches)) applyAgents(msg.patches, msg.tick);
+        if (Array.isArray(msg.agents)) applyAgents(msg.agents, msg.tick);
+        render();
+        break;
+      case 'ping':                        // keepalive, nothing to draw
+        break;
+      default:                            // forward compatibility (AC-W2-06)
+        warn('unknown ws frame type "' + msg.type + '" — kept drawing');
     }
+  };
+
+  ws.onerror = () => { /* onclose handles recovery */ };
+
+  ws.onclose = () => {
+    setLink('reconnecting', 'reconnecting');
+    startPolling();
+    const delay = Math.min(reconnectDelay, 15000);
+    reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+    setTimeout(connect, delay);
   };
 }
 
-fetch('/api/world/state').then(r => r.json()).then(apply).catch(() => {});
-connect();
+/* ======================================================================
+   9. Boot
+   ====================================================================== */
+function boot() {
+  $('#foot-contract').textContent = 'contract v' + CONTRACT.contract_version + ' · ' + CONTRACT.ticket;
+  $('#agent-count').textContent = String(AGENTS.length);
+  buildFloor();
+  buildMissionControl();
+  render();                 // explicit "no state yet" — the floor never renders blank
+  loadSnapshot();
+  connect();
+  window.addEventListener('beforeunload', () => { if (ws) ws.onclose = null; });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
 </script>
 </body>
 </html>
