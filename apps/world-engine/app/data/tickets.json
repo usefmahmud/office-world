@@ -1,0 +1,169 @@
+{
+  "source": "atlas:tickets?prefix=WORLD-,CHAT-",
+  "fetched_at": "2026-11-19T13:15:31Z",
+  "count": 27,
+  "tickets": [
+    {
+      "key": "CHAT-1",
+      "title": "API skeleton: FastAPI app + settings + SQLite + /api/health",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.367171"
+    },
+    {
+      "key": "CHAT-2",
+      "title": "Auth: register/login with JWT + pytest",
+      "status": "done",
+      "updated_at": "2026-11-19 00:30:09.362705"
+    },
+    {
+      "key": "CHAT-3",
+      "title": "Conversations: model + list/create 1:1 + tests",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.474162"
+    },
+    {
+      "key": "CHAT-4",
+      "title": "Messages: send + paginated list + tests",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.583393"
+    },
+    {
+      "key": "CHAT-5",
+      "title": "Realtime: WebSocket broadcast + tests",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.692258"
+    },
+    {
+      "key": "CHAT-6",
+      "title": "Presence: online/offline over WebSocket + tests",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.800789"
+    },
+    {
+      "key": "CHAT-7",
+      "title": "Web: auth screens + API client (RTL)",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:20.906758"
+    },
+    {
+      "key": "CHAT-8",
+      "title": "Web: chat list + thread + composer (RTL)",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.023367"
+    },
+    {
+      "key": "CHAT-9",
+      "title": "Sprint 1 plan + acceptance criteria",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.142831"
+    },
+    {
+      "key": "CHAT-10",
+      "title": "CI: enforce commitlint + pytest + web build on PRs",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.247825"
+    },
+    {
+      "key": "CHAT-11",
+      "title": "Docker: compose for api + web with healthchecks",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.356386"
+    },
+    {
+      "key": "CHAT-12",
+      "title": "Research: WS vs SSE for chat + pagination strategy",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.462685"
+    },
+    {
+      "key": "CHAT-13",
+      "title": "Copy: Arabic UI text, empty states and error messages",
+      "status": "done",
+      "updated_at": "2026-11-19 03:51:21.571281"
+    },
+    {
+      "key": "WORLD-1",
+      "title": "W0 contract: dayplan + event vocabulary + AC",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.426379"
+    },
+    {
+      "key": "WORLD-2",
+      "title": "W1 sim core: deterministic step() + golden tests",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.440292"
+    },
+    {
+      "key": "WORLD-3",
+      "title": "W1 schedule: per-agent day plans + room conflicts",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.453780"
+    },
+    {
+      "key": "WORLD-4",
+      "title": "W2 world-engine container: tick, WS, resource caps",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.465808"
+    },
+    {
+      "key": "WORLD-5",
+      "title": "W3 render: SVG floor plan + mission control wall",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.477891"
+    },
+    {
+      "key": "WORLD-6",
+      "title": "W4 life: meetings, reminders, nudges",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.491663"
+    },
+    {
+      "key": "WORLD-7",
+      "title": "W4 almanac: FTS5 facts with provenance + reading room",
+      "status": "done",
+      "updated_at": "2026-11-19 12:15:56.503370"
+    },
+    {
+      "key": "WORLD-8",
+      "title": "W5 ship: compose wiring + restart-resume check",
+      "status": "done",
+      "updated_at": "2026-11-19 12:22:55.240134"
+    },
+    {
+      "key": "WORLD-9",
+      "title": "World speed: sim-time multiplier (day in minutes)",
+      "status": "done",
+      "updated_at": "2026-11-19 13:00:05.768011"
+    },
+    {
+      "key": "WORLD-10",
+      "title": "World chat: render message events as a live transcript",
+      "status": "done",
+      "updated_at": "2026-11-19 13:00:05.782734"
+    },
+    {
+      "key": "WORLD-11",
+      "title": "Agent panel on click: thinking, last words, ticket details",
+      "status": "in_progress",
+      "updated_at": "2026-11-19 13:09:36.011639"
+    },
+    {
+      "key": "WORLD-12",
+      "title": "Natural short dialogue between co-located agents",
+      "status": "backlog",
+      "updated_at": "2026-11-19 13:04:36.178273"
+    },
+    {
+      "key": "WORLD-13",
+      "title": "Agent panel on click: thinking, last words, ticket details",
+      "status": "backlog",
+      "updated_at": "2026-11-19 13:10:08.209824"
+    },
+    {
+      "key": "WORLD-14",
+      "title": "Natural short dialogue between co-located agents",
+      "status": "backlog",
+      "updated_at": "2026-11-19 13:10:08.219377"
+    }
+  ]
+}

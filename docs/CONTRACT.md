@@ -1,4 +1,4 @@
-# Agents Office World — World Contract (v1.1.0)
+# Agents Office World — World Contract (v1.2.0)
 
 **Status:** `FROZEN` — this document plus `world/dayplan.yaml` is the single reference every wave
 builds against.
@@ -13,6 +13,11 @@ in the same commit. Renames are breaking; additions are a minor bump; removals a
 overridable with `WORLD_SIM_SECONDS_PER_TICK`, `day_length_ticks` follows it: 540), and the renderer
 gained a transcript panel fed by `message` events (§9.3). The five states, five rooms, six agents,
 eight event types and every transition edge are unchanged.
+
+**v1.2.0 (WORLD-11)** — one additive wire change, no rename, no removed edge: every agent in the
+snapshot (and in every delta patch) carries a derived `thought` line, the `thought_source` that names
+the row it came from, and the `ticket_title`/`ticket_status` of the ticket it holds (§9.4). The
+renderer's agent panel shows them. No state, room, agent, event or transition changed.
 
 
 Machine-readable source of truth: **`world/dayplan.yaml`**. This document is the prose around it.
@@ -364,6 +369,42 @@ moment the message arrived.
 
 ---
 
+### 9.4 v1.2.0 engine extensions (WORLD-11) — the agent panel
+
+Additive fields on every agent in the snapshot and in every delta patch; a v1.1.0 client ignores them
+and keeps drawing. Nothing here is generated text: each line is derived from a row the engine holds.
+
+| field | type | meaning |
+|---|---|---|
+| `thought` | `str` | one readable line: what this agent is doing right now. Never empty — when nothing is known the engine says so |
+| `thought_source` | `str` | which row produced it: `ticket` (the key + its Atlas title) · `meeting` (the topic of the meeting that is actually open) · `dayplan` (the block of `schedule` running at the sim minute) · `state` (only the state verb) · `none` |
+| `ticket_title` | `str|null` | the Atlas title of `ticket`, snapshotted from the ledger — `null` when the catalog has no such key, never a made-up title |
+| `ticket_status` | `str|null` | that ticket's Atlas status (`backlog`, `in_progress`, …), from the same row |
+
+**Derivation ladder (no invention anywhere).**
+
+1. `working`/`review` with a ticket → `<state verb> <KEY> — <Atlas title>`; a key the catalog does not
+   know prints the key and says the title is missing.
+2. `meeting` → the topic that arrived on `meeting_open` (a `join` marker is not a topic); if the world
+   sent none, the topic of the dayplan meeting block.
+3. the dayplan block running at the sim minute, **when its kind matches the state** (`break` block for
+   `break`, `meeting` block for `meeting`, day open/close for `idle`) and the block does not name other
+   participants; an `idle` agent with no matching block is told what the day plan has next.
+4. otherwise the bare state verb, and finally an explicit "no data" line.
+
+The sim minute is derived from the tick with the same scale as `sim_time` (DT-2): no wall-clock read.
+The ticket catalog is `apps/world-engine/app/data/tickets.json` (written from the Atlas ledger; it
+carries `source` + `fetched_at`), and the day plan is `app/data/schedule.json`, generated from
+`world/dayplan.yaml` by `apps/world-engine/tools/build_data.py --schedule` and drift-tested.
+
+**Panel rule (renderer).** Clicking a floor dot or a Mission Control row fills the `AGENT PANEL` with
+name · role · state · room · time in state · ticket key and status · title · `Thinking:` the `thought`
+line · `Last said:` the newest `message` from that agent, with its derived sim time. Every field is the
+wire value or an explicit empty state ("nothing said yet", "no title in the Atlas catalog"); the page
+never composes a thought of its own.
+
+---
+
 ## 10. Acceptance criteria per wave
 
 Full, checkable list with commands: **`docs/AC.md`**. The gate per wave:
@@ -396,7 +437,8 @@ can build against it. It does not close when the files merely exist.
 | **D-08** | v1 has no pathfinding, needs, moods, 3D, LLM chatter | frozen scope (PLAN §7); anything else goes to `v2-backlog.md` |
 | **D-09** | the sim clock scale is one env-backed number: `sim.tick_seconds` is the default of `WORLD_SIM_SECONDS_PER_TICK` (**60**), and `day_length_ticks = (day_end - day_start) * 3600 / tick_seconds` | the owner asked for a faster day; a hardcoded 1 s/tick meant 9 h of wall clock for one day. One scale in the YAML, read by the engine and by the page, keeps the clock, the day plan and the golden log in agreement (WORLD-9) |
 | **D-10** | the transcript is built from `message` events only, and the snapshot carries the last 30 of them | the owner wants to read the conversation, not a second state machine. `message` is already a self-loop in §4, so a transcript cannot move anybody; the snapshot tail means a reload is not blank (WORLD-10) |
+| **D-11** | the agent panel's `thought` is **derived, never generated**: ticket key + Atlas title, else the open meeting's topic, else the dayplan block, and `thought_source` names which one | the owner asked what an agent is thinking, and that answer has to be auditable. With no LLM in the loop the only honest source is a row the engine already holds; a free-text thought would be invented state with no ticket behind it (WORLD-11) |
 
 ---
 
-*v1.1.0 · frozen 2026-11-19 · WORLD-1 · the world may be wrong, but it may not be invented.*
+*v1.2.0 · frozen 2026-11-19 · WORLD-1 · the world may be wrong, but it may not be invented.*

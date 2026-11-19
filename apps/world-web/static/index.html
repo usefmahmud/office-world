@@ -135,6 +135,17 @@
   .kv dt{color:var(--ink-faint); letter-spacing:.08em; text-transform:uppercase; font-size:9.5px; padding-top:2px}
   .kv dd{margin:0; color:#dbe9f6; font-variant-numeric:tabular-nums}
   .kv dd.empty{color:var(--ink-faint); font-style:italic; font-variant-numeric:normal}
+  /* ---- agent panel (WORLD-11): what they think, what they last said ---- */
+  .say{margin:10px 0 0; border-top:1px solid var(--line); padding-top:9px}
+  .say p{margin:0 0 7px; font-size:11.5px; color:#dbe9f6; overflow-wrap:anywhere}
+  .say p:last-child{margin-bottom:0}
+  .say .lbl{display:block; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+            color:var(--ink-faint); margin-bottom:2px}
+  .say p.empty,.say p .empty{color:var(--ink-faint); font-style:italic}
+  #detail-thought{color:#eaf4ff}
+  #detail-thought::before{content:"“"; color:var(--ink-faint)}
+  #detail-thought::after{content:"”"; color:var(--ink-faint)}
+  #detail-last-said .at{color:var(--ink-faint); font-variant-numeric:tabular-nums; margin-right:6px}
   .hint{color:var(--ink-faint); font-size:10.5px; margin:8px 0 0}
 
   .plan{border-top:1px solid var(--line); padding:12px 16px 16px}
@@ -202,16 +213,25 @@
         </thead>
         <tbody id="mc-body"></tbody>
       </table>
-      <div id="detail">
+      <div id="detail" aria-label="Agent panel" data-agent="">
         <h3>Agent panel — <span id="detail-who">no agent selected</span></h3>
         <dl class="kv">
-          <dt>Ticket</dt><dd id="detail-ticket" class="empty">—</dd>
+          <dt>Name</dt><dd id="detail-name" class="empty">no agent selected</dd>
+          <dt>Role</dt><dd id="detail-role" class="empty">—</dd>
           <dt>State</dt><dd id="detail-state" class="empty">—</dd>
           <dt>Room</dt><dd id="detail-room" class="empty">—</dd>
           <dt>In state</dt><dd id="detail-elapsed" class="empty">—</dd>
           <dt>Since tick</dt><dd id="detail-since" class="empty">—</dd>
+          <dt>Ticket</dt><dd id="detail-ticket" class="empty">—</dd>
+          <dt>Title</dt><dd id="detail-title" class="empty">—</dd>
           <dt>Next up</dt><dd id="detail-next" class="empty">no data</dd>
         </dl>
+        <!-- WORLD-11: the two lines the owner asked for — the thought, and the last
+             thing this agent said in the transcript (`message` events only). -->
+        <div class="say">
+          <p id="detail-thinking"><span class="lbl">Thinking:</span><span id="detail-thought" class="empty">no agent selected</span></p>
+          <p id="detail-last"><span class="lbl">Last said:</span><span id="detail-last-said" class="empty">nothing said yet</span></p>
+        </div>
         <p class="hint" id="detail-hint">Click a dot or a row to inspect an agent.</p>
       </div>
     </div>
@@ -233,7 +253,7 @@
   <span id="foot-warnings" class="ok">contract warnings: 0</span>
 </footer>
 
-<script id="world-contract" type="application/json">{"contract_version":"1.1.0","source":"world/dayplan.yaml","ticket":"WORLD-1","sim":{"tick_seconds":60,"t0":"2026-01-05T09:00:00Z","day_start":"09:00","day_end":"18:00","day_length_ticks":540,"seed":42},"canvas":{"w":1200,"h":700},"states":["idle","working","review","break","meeting"],"initial_state":"idle","canonical_cycle":["idle","working","review","break","meeting","idle"],"event_types":["task_start","task_done","message","meeting_open","meeting_close","break","handoff","idle"],"agents":[{"id":"hakim","name":"Hakim","role":"orchestration","desk":"D1","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"layla","name":"Layla","role":"lifecycle","desk":"D2","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"maryam","name":"Maryam","role":"delivery","desk":"D3","home_room":"bullpen","secondary_room":"review_corner"},{"id":"omar","name":"Omar","role":"development","desk":"D4","home_room":"bullpen","secondary_room":"review_corner"},{"id":"salim","name":"Salim","role":"research","desk":"D5","home_room":"bullpen","secondary_room":"reading_room"},{"id":"yassin","name":"Yassin","role":"infrastructure","desk":"D6","home_room":"bullpen","secondary_room":"review_corner"}],"rooms":[{"id":"bullpen","name":"Bullpen","kind":"open_floor","capacity":6,"rect":{"x":40,"y":40,"w":720,"h":400},"anchor":{"x":740,"y":240}},{"id":"meeting_room","name":"Meeting Room","kind":"meeting","capacity":6,"rect":{"x":800,"y":40,"w":360,"h":240},"anchor":{"x":830,"y":160}},{"id":"review_corner","name":"Review Corner","kind":"review","capacity":2,"rect":{"x":800,"y":320,"w":360,"h":120},"anchor":{"x":830,"y":380}},{"id":"kitchen","name":"Kitchen","kind":"break","capacity":4,"rect":{"x":40,"y":470,"w":480,"h":180},"anchor":{"x":500,"y":560}},{"id":"reading_room","name":"Reading Room","kind":"focus","capacity":2,"rect":{"x":560,"y":470,"w":600,"h":180},"anchor":{"x":600,"y":560}}],"stations":[{"id":"D1","agent":"hakim","room":"bullpen","x":120,"y":140},{"id":"D2","agent":"layla","room":"bullpen","x":320,"y":140},{"id":"D3","agent":"maryam","room":"bullpen","x":520,"y":140},{"id":"D4","agent":"omar","room":"bullpen","x":120,"y":300},{"id":"D5","agent":"salim","room":"bullpen","x":320,"y":300},{"id":"D6","agent":"yassin","room":"bullpen","x":520,"y":300}],"schedule":[{"id":"S1","at":"09:00","type":"day_open","room":"bullpen","rule":"every_agent","emit":"task_start"},{"id":"S2","at":"10:00","type":"meeting","topic":"standup","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":900,"emit":["meeting_open","meeting_close"]},{"id":"S3","at":"13:00","type":"break","kind":"lunch","room":"kitchen","participants":"all","planned_ticks":2700},{"id":"S4","at":"13:45","type":"resume","rule":"every_agent","emit":"task_start"},{"id":"S5","at":"15:30","type":"break","kind":"coffee","room":"kitchen","participants":["layla","salim","yassin"],"planned_ticks":900},{"id":"S6","at":"16:30","type":"review_sweep","room":"review_corner","participants":["maryam"],"emit":"task_done"},{"id":"S7","at":"17:00","type":"meeting","topic":"daily_review","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":1800,"emit":["meeting_open","meeting_close"]},{"id":"S8","at":"18:00","type":"day_close","rule":"every_agent","emit":"idle"}]}</script>
+<script id="world-contract" type="application/json">{"contract_version":"1.2.0","source":"world/dayplan.yaml","ticket":"WORLD-1","sim":{"tick_seconds":60,"t0":"2026-01-05T09:00:00Z","day_start":"09:00","day_end":"18:00","day_length_ticks":540,"seed":42},"canvas":{"w":1200,"h":700},"states":["idle","working","review","break","meeting"],"initial_state":"idle","canonical_cycle":["idle","working","review","break","meeting","idle"],"event_types":["task_start","task_done","message","meeting_open","meeting_close","break","handoff","idle"],"agents":[{"id":"hakim","name":"Hakim","role":"orchestration","desk":"D1","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"layla","name":"Layla","role":"lifecycle","desk":"D2","home_room":"bullpen","secondary_room":"meeting_room"},{"id":"maryam","name":"Maryam","role":"delivery","desk":"D3","home_room":"bullpen","secondary_room":"review_corner"},{"id":"omar","name":"Omar","role":"development","desk":"D4","home_room":"bullpen","secondary_room":"review_corner"},{"id":"salim","name":"Salim","role":"research","desk":"D5","home_room":"bullpen","secondary_room":"reading_room"},{"id":"yassin","name":"Yassin","role":"infrastructure","desk":"D6","home_room":"bullpen","secondary_room":"review_corner"}],"rooms":[{"id":"bullpen","name":"Bullpen","kind":"open_floor","capacity":6,"rect":{"x":40,"y":40,"w":720,"h":400},"anchor":{"x":740,"y":240}},{"id":"meeting_room","name":"Meeting Room","kind":"meeting","capacity":6,"rect":{"x":800,"y":40,"w":360,"h":240},"anchor":{"x":830,"y":160}},{"id":"review_corner","name":"Review Corner","kind":"review","capacity":2,"rect":{"x":800,"y":320,"w":360,"h":120},"anchor":{"x":830,"y":380}},{"id":"kitchen","name":"Kitchen","kind":"break","capacity":4,"rect":{"x":40,"y":470,"w":480,"h":180},"anchor":{"x":500,"y":560}},{"id":"reading_room","name":"Reading Room","kind":"focus","capacity":2,"rect":{"x":560,"y":470,"w":600,"h":180},"anchor":{"x":600,"y":560}}],"stations":[{"id":"D1","agent":"hakim","room":"bullpen","x":120,"y":140},{"id":"D2","agent":"layla","room":"bullpen","x":320,"y":140},{"id":"D3","agent":"maryam","room":"bullpen","x":520,"y":140},{"id":"D4","agent":"omar","room":"bullpen","x":120,"y":300},{"id":"D5","agent":"salim","room":"bullpen","x":320,"y":300},{"id":"D6","agent":"yassin","room":"bullpen","x":520,"y":300}],"schedule":[{"id":"S1","at":"09:00","type":"day_open","room":"bullpen","rule":"every_agent","emit":"task_start"},{"id":"S2","at":"10:00","type":"meeting","topic":"standup","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":900,"emit":["meeting_open","meeting_close"]},{"id":"S3","at":"13:00","type":"break","kind":"lunch","room":"kitchen","participants":"all","planned_ticks":2700},{"id":"S4","at":"13:45","type":"resume","rule":"every_agent","emit":"task_start"},{"id":"S5","at":"15:30","type":"break","kind":"coffee","room":"kitchen","participants":["layla","salim","yassin"],"planned_ticks":900},{"id":"S6","at":"16:30","type":"review_sweep","room":"review_corner","participants":["maryam"],"emit":"task_done"},{"id":"S7","at":"17:00","type":"meeting","topic":"daily_review","room":"meeting_room","participants":["hakim","layla","maryam","omar","salim","yassin"],"planned_ticks":1800,"emit":["meeting_open","meeting_close"]},{"id":"S8","at":"18:00","type":"day_close","rule":"every_agent","emit":"idle"}]}</script>
 <script id="world-transcript-core" type="text/javascript">
 /* Transcript core (WORLD-10) — DOM-free, no framework, no state of its own.
    The page and apps/world-web/tests/test_transcript_panel.py exercise exactly this code,
@@ -321,8 +341,18 @@
   /* Display order: newest first, so a new message lands at the top of the panel. */
   function rows(state) { return state.lines.slice().reverse(); }
 
+  /* WORLD-11: the newest message one agent said, or null. Chronological buffer, so we
+     walk it backwards instead of trusting the display order. */
+  function lastBy(state, agentId) {
+    if (!state || !Array.isArray(state.lines) || typeof agentId !== 'string') return null;
+    for (var i = state.lines.length - 1; i >= 0; i -= 1) {
+      if (state.lines[i].agentId === agentId) return state.lines[i];
+    }
+    return null;
+  }
+
   root.WorldTranscript = {
-    MAX_LINES: MAX_LINES, create: create, ingest: ingest, rows: rows,
+    MAX_LINES: MAX_LINES, create: create, ingest: ingest, rows: rows, lastBy: lastBy,
     describe: describe, simDate: simDate, hhmmss: hhmmss
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
@@ -401,7 +431,9 @@ function agentFromWire(raw, tick, prev) {
   const id = String(raw.id != null ? raw.id : '');
   if (!AGENT_BY_ID.has(id)) { warn('unknown agent id "' + id + '" (W-EVT-04 class) — ignored'); return null; }
   const out = Object.assign({id: id, state: null, room: null, roomRaw: null,
-                             taskId: null, elapsed: null, sinceTick: null, x: null, y: null}, prev || {});
+                             taskId: null, elapsed: null, sinceTick: null, x: null, y: null,
+                             ticketTitle: null, ticketStatus: null,
+                             thought: null, thoughtSource: null}, prev || {});
   out.id = id;
 
   if ('state' in raw) {
@@ -415,6 +447,17 @@ function agentFromWire(raw, tick, prev) {
   }
   if ('task_id' in raw) out.taskId = typeof raw.task_id === 'string' ? raw.task_id : null;
   else if ('ticket' in raw) out.taskId = typeof raw.ticket === 'string' ? raw.ticket : null;
+  /* WORLD-11: the engine sends what the agent is thinking and the Atlas title of the
+     ticket it holds. Absent stays null — the panel then says so instead of guessing. */
+  if ('ticket_title' in raw) out.ticketTitle = typeof raw.ticket_title === 'string' ? raw.ticket_title : null;
+  if ('ticket_status' in raw) out.ticketStatus = typeof raw.ticket_status === 'string' ? raw.ticket_status : null;
+  if (typeof raw.thought === 'string' && raw.thought !== '') {
+    out.thought = raw.thought;
+    out.thoughtSource = typeof raw.thought_source === 'string' ? raw.thought_source : null;
+  } else if ('thought' in raw) {
+    out.thought = null;
+    out.thoughtSource = null;
+  }
   if (Number.isInteger(raw.elapsed_ticks)) out.elapsed = raw.elapsed_ticks;
   else if (Number.isInteger(raw.since_tick)) {
     out.sinceTick = raw.since_tick;
@@ -771,33 +814,53 @@ function renderDetail(simNow) {
   const id = world.selected;
   const set = (sel, value, emptyText) => {
     const el = $(sel);
+    if (!el) return null;
     el.textContent = value === null || value === undefined || value === '' ? emptyText : String(value);
     el.classList.toggle('empty', value === null || value === undefined || value === '');
+    return el;
   };
+  const detail = $('#detail');
+  const thoughtEl = $('#detail-thought');
+  const saidEl = $('#detail-last-said');
+  if (detail) detail.dataset.agent = id || '';
+  if (thoughtEl) { thoughtEl.dataset.source = ''; thoughtEl.removeAttribute('title'); }
+  if (saidEl) { saidEl.dataset.tick = ''; saidEl.dataset.agent = ''; saidEl.dataset.room = ''; saidEl.removeAttribute('title'); }
 
   if (!id) {
     $('#detail-who').textContent = 'no agent selected';
-    set('#detail-ticket', null, '—');
+    set('#detail-name', null, 'no agent selected');
+    set('#detail-role', null, '—');
     set('#detail-state', null, '—');
     set('#detail-room', null, '—');
     set('#detail-elapsed', null, '—');
     set('#detail-since', null, '—');
+    set('#detail-ticket', null, '—');
+    set('#detail-title', null, '—');
     set('#detail-next', null, 'no data');
+    set('#detail-thought', null, 'no agent selected');
+    set('#detail-last-said', null, 'nothing said yet');
     $('#detail-hint').textContent = 'Click a dot or a row to inspect an agent.';
     return;
   }
 
   const agent = AGENT_BY_ID.get(id);
   const a = world.agents.get(id);
-  $('#detail-who').textContent = agent.name + ' · ' + agent.id + ' · ' + agent.desk;
+  $('#detail-who').textContent = agent.name + ' · ' + agent.id;
 
-  set('#detail-ticket', a && a.taskId ? a.taskId : null, 'no ticket assigned');
+  set('#detail-name', agent.name, '—');
+  set('#detail-role', agent.role, '—');
   set('#detail-state', a && a.state ? a.state : null, 'no state on the wire yet');
   set('#detail-room', a && a.room ? (ROOMS.get(a.room) || {name: a.room}).name : null, '—');
 
   const elapsed = a && Number.isInteger(a.elapsed) ? a.elapsed : null;
   set('#detail-elapsed', elapsed === null ? null : formatElapsed(elapsed) + ' (' + elapsed + ' ticks)', '—');
   set('#detail-since', a && Number.isInteger(a.sinceTick) ? a.sinceTick : null, '—');
+
+  // Ticket = key + its Atlas status; Title = the Atlas title of that key.
+  const key = a && a.taskId ? a.taskId : null;
+  const status = a && a.ticketStatus ? a.ticketStatus : null;
+  set('#detail-ticket', key ? key + (status ? ' · ' + status : '') : null, 'no ticket assigned');
+  set('#detail-title', a && a.ticketTitle ? a.ticketTitle : null, 'no title in the Atlas catalog');
 
   const next = nextMilestone(simNow);
   if (!next) {
@@ -806,6 +869,33 @@ function renderDetail(simNow) {
     const what = String(next.topic || next.kind || next.type).replace(/_/g, ' ');
     set('#detail-next', next.at + ' ' + what + ' (' + next.id + ')', 'no further entry today');
   }
+
+  // Thinking: exactly the line the engine derived from real rows (never re-worded here).
+  const thought = a && a.thought ? a.thought : null;
+  set('#detail-thought', thought, a ? 'no thought on the wire yet' : 'no state on the wire yet');
+  if (thoughtEl && a && a.thoughtSource) {
+    thoughtEl.dataset.source = a.thoughtSource;
+    thoughtEl.title = 'source: ' + a.thoughtSource;
+  }
+
+  // Last said: the newest `message` event from this agent, with its sim time.
+  const said = WorldTranscript.lastBy(transcript, id);
+  if (!said) {
+    set('#detail-last-said', null, 'nothing said yet');
+  } else if (saidEl) {
+    saidEl.textContent = '';
+    const at = document.createElement('span');
+    at.className = 'at';
+    at.textContent = said.clock;
+    saidEl.appendChild(at);
+    saidEl.appendChild(document.createTextNode(' · ' + said.text));
+    saidEl.classList.remove('empty');
+    saidEl.title = said.line;
+    saidEl.dataset.tick = said.tick === null ? '' : String(said.tick);
+    saidEl.dataset.agent = id;
+    saidEl.dataset.room = said.roomId;
+  }
+
   $('#detail-hint').textContent = 'Source: ' + (world.link === 'live' ? 'live /ws/world deltas' : 'GET /api/world/state');
 }
 

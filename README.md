@@ -30,6 +30,17 @@ criteria per wave. The sim-side contract lives in `docs/CONTRACT-SIM.md`.
 python3 world/validate_dayplan.py   # contract lint; exit 0 = W0 contract is consistent
 pytest -q                           # whole suite: golden hash, engine API/WS, static page + transcript
 python3 -c "from world import *; print(state_sha256(run(initial_state(12345), 10_000)))"
+
+# the DOM test that clicks a Mission Control row needs jsdom (test-only, not shipped)
+cd apps/world-web/tests/js && npm install && cd -   # pytest skips that one test without it
+```
+
+Engine data that the agent panel reads is generated, not hand-kept:
+
+```bash
+python3 apps/world-engine/tools/build_data.py --schedule                            # from world/dayplan.yaml
+python3 apps/world-engine/tools/build_data.py --tickets <path>/atlas.db             # Atlas ledger snapshot
+python3 apps/world-engine/tools/build_data.py --check                               # drift check
 ```
 
 The core contract (state machine, event vocabulary, determinism rules, snapshot

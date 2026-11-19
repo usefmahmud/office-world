@@ -1,0 +1,89 @@
+{
+  "source": "world/dayplan.yaml",
+  "contract_version": "1.2.0",
+  "day": {
+    "start": "09:00",
+    "end": "18:00"
+  },
+  "entries": [
+    {
+      "id": "S1",
+      "at": "09:00",
+      "type": "day_open",
+      "room": "bullpen"
+    },
+    {
+      "id": "S2",
+      "at": "10:00",
+      "type": "meeting",
+      "topic": "standup",
+      "room": "meeting_room",
+      "planned_ticks": 900,
+      "participants": [
+        "hakim",
+        "layla",
+        "maryam",
+        "omar",
+        "salim",
+        "yassin"
+      ]
+    },
+    {
+      "id": "S3",
+      "at": "13:00",
+      "type": "break",
+      "kind": "lunch",
+      "room": "kitchen",
+      "planned_ticks": 2700,
+      "participants": "all"
+    },
+    {
+      "id": "S4",
+      "at": "13:45",
+      "type": "resume"
+    },
+    {
+      "id": "S5",
+      "at": "15:30",
+      "type": "break",
+      "kind": "coffee",
+      "room": "kitchen",
+      "planned_ticks": 900,
+      "participants": [
+        "layla",
+        "salim",
+        "yassin"
+      ]
+    },
+    {
+      "id": "S6",
+      "at": "16:30",
+      "type": "review_sweep",
+      "room": "review_corner",
+      "participants": [
+        "maryam"
+      ]
+    },
+    {
+      "id": "S7",
+      "at": "17:00",
+      "type": "meeting",
+      "topic": "daily_review",
+      "room": "meeting_room",
+      "planned_ticks": 1800,
+      "participants": [
+        "hakim",
+        "layla",
+        "maryam",
+        "omar",
+        "salim",
+        "yassin"
+      ]
+    },
+    {
+      "id": "S8",
+      "at": "18:00",
+      "type": "day_close"
+    }
+  ]
+}

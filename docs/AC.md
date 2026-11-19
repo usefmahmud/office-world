@@ -1,4 +1,4 @@
-# Agents Office World — Acceptance Criteria (v1.1.0)
+# Agents Office World — Acceptance Criteria (v1.2.0)
 
 Companion to `docs/CONTRACT.md` and `world/dayplan.yaml`. One rule for this file: **every criterion is
 checkable by a named command**, and "met" means that command was run and printed what it should.
@@ -67,6 +67,7 @@ necessary, not sufficient — a contract nobody has read is a suggestion.
 | **AC-W3-06** | clicking an agent opens a panel with its `task_id`, elapsed ticks and next milestone; empty state is explicit, never a blank box | click each dot → panel visible with 3 fields | pending |
 | **AC-W3-07** | the transcript panel renders every `message` event as `[HH:MM:SS] ROOM · Agent: text`, newest first, capped at 60, meeting-room lines highlighted, and the "live" mark follows who is in the meeting room *now* (WORLD-10) | `pytest apps/world-web/tests/test_transcript_panel.py -q` → 9 passed; browser: post `message` events → `#transcript li` texts equal the formatted lines | **met** |
 | **AC-W3-08** | the displayed clock advances exactly `sim_seconds_per_tick` per tick and reads the scale off the wire, so `WORLD_SIM_SECONDS_PER_TICK` changes the page (default 60 → one simulated minute per tick) | `pytest apps/world-web/tests/test_sim_clock.py apps/world-engine/tests/test_sim_speed.py -q`; browser: `#clock` at tick N and N+1 differ by 60 s | **met** |
+| **AC-W3-09** | the agent panel: clicking a floor dot or a Mission Control row fills `AGENT PANEL` with name, role, state, room, time in state, ticket key + status + Atlas title, `Thinking:` the derived `thought` (its `thought_source` on the element) and `Last said:` the newest `message` from that agent with its sim time; every field is a wire value or an explicit empty state, and a new delta updates an open panel | `pytest apps/world-web/tests/test_agent_panel.py apps/world-engine/tests/test_thought.py -q` (jsdom clicks the real page); browser: click a row -> panel text equals `/api/world/state` | **met** (WORLD-11) |
 
 ---
 
@@ -131,4 +132,11 @@ works without an absolute interpreter path — that gap belongs to AC-W1-03's to
 
 ---
 
-*v1.1.0 · WORLD-1 · the criterion is the command, not the story.*
+| `2026-11-19T13:20Z` on `feat/WORLD-11-panel` | `python -m pytest -q` (root `pytest.ini`) | `191 passed, 1 warning, 6 subtests passed` in 4.4 s — 162 pre-existing + `test_thought.py` 23 + `test_agent_panel.py` 4 (the jsdom test ran, not skipped) |
+| same | `python world/validate_dayplan.py` | `agents=6 rooms=5 event_types=8 states=5 schedule_entries=8` · `OK — 242 contract checks passed` · contract v1.2.0, exit 0 |
+| same | `python apps/world-web/contract_projection.py --check` · `python apps/world-engine/tools/build_data.py --check` | `OK` on both — the page's inline block and `app/data/schedule.json` match `world/dayplan.yaml` |
+| same | engine + page on `127.0.0.1:8099`, real browser, click on Omar's Mission Control row | panel = `Omar · development · working · Bullpen · WORLD-7 · done` + Atlas title; `Thinking:` equals the snapshot `thought` (`thought_source` = `ticket`, Arabic copy from the engine UI copy file); `Last said:` `09:19:00 · …` (tick 19); link `live`, 0 console errors |
+| same | jsdom drives the shipped page: row click → other row → floor dot → live delta → deselect | panel follows every click, a delta rewrites `Thinking:` and `Last said:`, deselect returns to `no agent selected` / `nothing said yet` (AC-W3-09) |
+| same | `grep -rlP '[\x{0600}-\x{06FF}]' apps/world-web/static/index.html` | no output — the thought text arrives from the engine, the page composes none (AC-W0-05 for this file) |
+
+*v1.2.0 · WORLD-1 · the criterion is the command, not the story.*

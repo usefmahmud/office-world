@@ -2,15 +2,18 @@
 # Agents Office World — dayplan.yaml
 # The contract. Machine-readable source of truth for every wave.
 # Prose rules: docs/CONTRACT.md · acceptance: docs/AC.md
-# Frozen v1.1.0 · WORLD-1 · owner: maryam
+# Frozen v1.2.0 · WORLD-1 · owner: maryam
 # Any change to a name / field / type / enum value / edge = contract change:
 # bump `version`, one ticket, update docs/AC.md in the same commit.
 # v1.1.0 (WORLD-9/WORLD-10): the sim clock scale became explicit and adjustable
 #   (`sim.tick_seconds` is the default of WORLD_SIM_SECONDS_PER_TICK), and the
 #   transcript panel consumes `message` events. No enum, id or edge changed.
+# v1.2.0 (WORLD-11): snapshot agents gained the derived `thought` / `thought_source`
+#   line and the `ticket_title` / `ticket_status` detail the agent panel shows.
+#   Additive only: no enum, id, room, geometry or transition changed.
 # =============================================================================
 
-version: "1.1.0"
+version: "1.2.0"
 contract:
   ticket: WORLD-1
   wave: W0

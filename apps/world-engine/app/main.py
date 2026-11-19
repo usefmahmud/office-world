@@ -62,7 +62,18 @@ def sim_time(tick: int) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-world = World(seed=WORLD_SEED, state_dir=STATE_DIR, clock=sim_time)
+def sim_minutes(tick: int) -> int:
+    """Minute of the simulated day (09:00 -> 540), same scale as `sim_time`.
+
+    WORLD-11: the dayplan half of an agent's `thought` needs "what time is it in the
+    office", and that is derived from the tick — never from the wall clock (DT-2).
+    """
+    return (
+        SIM_EPOCH.hour * 60 + SIM_EPOCH.minute + int(tick * SIM_SECONDS_PER_TICK) // 60
+    ) % (24 * 60)
+
+
+world = World(seed=WORLD_SEED, state_dir=STATE_DIR, clock=sim_time, sim_minutes=sim_minutes)
 replayed = world.replay()
 plan = sim.initial_durations(world)
 hub = Hub()
@@ -234,8 +245,10 @@ async def post_event(
         agent_id,
         event_type,
         ticket=payload.get("ticket"),
+        title=payload.get("title"),
         note=payload.get("note") if payload.get("note") is not None else payload.get("text"),
         room=_canonical_room(payload.get("room")),
+        topic=payload.get("topic"),
         source=str(payload.get("source", "api")),
     )
     if event is None:

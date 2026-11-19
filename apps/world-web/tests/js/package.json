@@ -1,0 +1,8 @@
+{
+  "name": "world-web-tests",
+  "private": true,
+  "description": "DOM harness for the static page: jsdom only, no build step and no runtime dependency",
+  "devDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}

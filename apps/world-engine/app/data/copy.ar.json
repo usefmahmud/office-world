@@ -1,0 +1,46 @@
+{
+  "_note": "Panel UI copy for the agent panel (WORLD-11). Arabic lives in a UI copy file, never in code (AC-W0-05). Placeholders are filled by app/thought.py from the wire and from real rows only.",
+  "_templates": {
+    "state_verb": "the agent's own state; {ticket} is the ticket key the engine holds",
+    "with_title": "{verb} — {title}; title comes from the Atlas ticket catalog",
+    "no_title": "{verb} plus an explicit note when the catalog has no title for that key",
+    "meeting_topic": "the topic of the meeting actually open in the world",
+    "slot": "the dayplan block running at the current sim time"
+  },
+  "state_verb": {
+    "idle": "مستني تيكت",
+    "working": "شغّال على {ticket}",
+    "review": "بيراجع {ticket}",
+    "break": "في بريك",
+    "meeting": "في اجتماع"
+  },
+  "with_title": "{verb} — {title}",
+  "no_title": "{verb} (مفيش عنوان للتيكت في كتالوج Atlas)",
+  "meeting_topic": "في اجتماع — {topic}",
+  "slot": {
+    "day_open": "بياخد أول تيكت اليوم من دفتر أطلس",
+    "meeting": "في اجتماع — {what}",
+    "break": "في بريك — {what}",
+    "resume": "راجع يكمل التيكت اللي قطعه البريك",
+    "review_sweep": "بيراجع التيكتس في ركن المراجعة",
+    "day_close": "بيقفل اليوم"
+  },
+  "slot_default": "{what}",
+  "kind": {
+    "coffee": "قهوة",
+    "lunch": "غدا",
+    "stretch": "تمدد"
+  },
+  "no_data": "مفيش تيكت ولا بند في جدول اليوم للوقت ده",
+  "state_verb_none": {
+    "working": "شغّال من غير تيكت",
+    "review": "بيراجع من غير تيكت"
+  },
+  "next_slot": "مستني — بعد كده {what} ({id} الساعة {at})",
+  "type": {
+    "day_open": "بداية اليوم",
+    "resume": "استكمال الشغل",
+    "review_sweep": "مراجعة",
+    "day_close": "قفل اليوم"
+  }
+}
