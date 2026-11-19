@@ -23,8 +23,13 @@ docs/         # contract (dayplan, events) and decisions
 
 See `docs/PLAN.md` for the full plan, `docs/CONTRACT.md` for the frozen event vocabulary and rules,
 `world/dayplan.yaml` for the machine-readable contract, and `docs/AC.md` for the checkable acceptance
-criteria per wave.
+criteria per wave. The sim-side contract lives in `docs/CONTRACT-SIM.md`.
 
 ```bash
 python3 world/validate_dayplan.py   # contract lint; exit 0 = W0 contract is consistent
+pytest -q                           # 27 tests, incl. the 10 000-tick golden hash
+python3 -c "from world import *; print(state_sha256(run(initial_state(12345), 10_000)))"
 ```
+
+The core contract (state machine, event vocabulary, determinism rules, snapshot
+shape) is frozen in `docs/CONTRACT.md` and `docs/CONTRACT-SIM.md`.
