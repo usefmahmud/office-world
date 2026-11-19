@@ -1,0 +1,32 @@
+{
+  "docs": [
+    {
+      "slug": "office-world/infra-port",
+      "title": "منفذ العرض ونطاق الشبكة",
+      "body": "العرض عبر منفذ 8095 على BIND_HOST، ومحرك العالم داخلي على المنفذ 8000 ولا يُنشر للخارج. لا يوجد تعريض عام بدون موافقة صريحة من المالك.",
+      "source_path": "shared/projects/office-world/PLAN.md#6-infra",
+      "fetched_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "slug": "office-world/budget",
+      "title": "ميزانية الموارد",
+      "body": "حد الموارد: ذاكرة أقل من 150 ميجابايت، ومعالج 0.75، وملف SQLite واحد. التك تردد واحد إلى اثنين هرتز، وممنوع أي نداء LLM داخل حلقة الحركة.",
+      "source_path": "shared/projects/office-world/PLAN.md#7-budget",
+      "fetched_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "slug": "office-world/v1-scope",
+      "title": "نطاق النسخة الأولى",
+      "body": "النسخة الأولى: طابق واحد وستة مكاتب وستة أنواع أحداث وحركة في خط مستقيم فقط. لا يوجد pathfinding ولا حالات مزاج ولا رسومات ثلاثية الأبعاد.",
+      "source_path": "shared/projects/office-world/PLAN.md#7-what-is-not-in-v1",
+      "fetched_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "slug": "office-world/state-machine",
+      "title": "آلة الحالة المجمدة",
+      "body": "آلة الحالة مجمدة: idle إلى working إلى review إلى break إلى meeting ثم idle. أنواع الأحداث المسموحة: task_start و task_done و message و meeting_open و meeting_close و break و handoff و idle.",
+      "source_path": "shared/projects/office-world/PLAN.md#3-waves",
+      "fetched_at": "2026-11-19T00:00:00Z"
+    }
+  ]
+}
